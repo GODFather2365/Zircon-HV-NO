@@ -563,11 +563,15 @@ namespace ZirconHV {
     /// </summary>
     /// </summary>
 public static object FindEncyclopedia(Type encType) {
-      if (encType == null) return null;
-      var found = FindSceneInstance(encType);
-      if (found != null) Info("Encyclopedia получен поллингом (Resources.FindObjectsOfTypeAll).");
-      return found;
-    }
+  if (encType == null) return null;
+  // Если Runner в Plugin.cs уже нашёл инстанс, берём его напрямую
+  if (Plugin.Instance != null && Plugin.Instance.enc != null) {
+    return Plugin.Instance.enc;
+  }
+  var found = FindSceneInstance(encType);
+  if (found != null) Info("Encyclopedia получен поллингом (Resources.FindObjectsOfTypeAll).");
+  return found;
+}
 
     /// <summary>
     /// Finds a live instance of the given type. v4 p.2: PRIMARY = Resources.FindObjectsOfTypeAll(type)

@@ -161,7 +161,7 @@ namespace ZirconHV {
 
       // v6 ПРАВКА 3: ДО AddWeaponMount переписываем jsonKey клона на "ZirconHV_1Mt"
       // (и все string-поля, равные старому jsonKey) — иначе словим Duplicate WeaponMount JSON key.
-      Registration.RewriteJsonKey(clone, bundleMountSO);
+      Registration.RewriteJsonKey(clone, null);
 
       // (e)+(f) регистрация EncyclopediaLoader + инжект хардпоинтов
       stage = "e/f) регистрация + инжект";

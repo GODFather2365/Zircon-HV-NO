@@ -574,27 +574,45 @@ public static object FindEncyclopedia(Type encType) {
     /// (reflection MakeGenericMethod, first non-null) — catches prefassets/inactive too;
     /// secondary = static Instance/instance/Current; tertiary = Object.FindObjectsOfType.
     /// </summary>
-    static object FindSceneInstance(Type t) {
-      if (t == null) return null;
-      try {
-        var gm = typeof(Resources).GetMethod("FindObjectsOfTypeAll",
-          BindingFlags.Public | BindingFlags.Static);
-        if (gm != null) {
-          var made = gm.MakeGenericMethod(t);
-          var arr = made.Invoke(null, null) as UnityEngine.Object[];
-          if (arr != null && arr.Length > 0) {
-            foreach (var o in arr) if (o != null) { Info("Resources.FindObjectsOfTypeAll<" + t.Name + "> -> " + o.name + " (" + o.GetType().FullName + ")"); return o; }
+static object FindSceneInstance(Type t) {
+  if (t == null) return null;
+  try {
+    // Явно ищем НЕ-generic метод, который принимает один параметр типа Type
+    var m = typeof(Resources).GetMethod(
+      "FindObjectsOfTypeAll", 
+      BindingFlags.Public | BindingFlags.Static, 
+      null, 
+      new Type[] { typeof(Type) }, 
+      null
+    );
+    
+    if (m != null) {
+      // Вызываем напрямую: Resources.FindObjectsOfTypeAll(t)
+      var arr = m.Invoke(null, new object[] { t }) as UnityEngine.Object[];
+      if (arr != null && arr.Length > 0) {
+        foreach (var o in arr) {
+          if (o != null) { 
+            Info("Resources.FindObjectsOfTypeAll(" + t.Name + ") -> " + o.name + " (" + o.GetType().FullName + ")"); 
+            return o; 
           }
         }
-      } catch (Exception e) { Warn("Resources.FindObjectsOfTypeAll<" + t.Name + "> упал: " + e.Message); }
-      var inst = Refl.FieldOrProp(t, "Instance") ?? Refl.FieldOrProp(t, "instance") ?? Refl.FieldOrProp(t, "Current");
-      if (inst != null && !(inst is Type)) return inst;
-      try {
-        var all = UnityEngine.Object.FindObjectsOfType(t);
-        if (all != null && all.Length > 0) return all[0] as UnityEngine.Object;
-      } catch { }
-      return null;
+      }
     }
+  } catch (Exception e) { 
+    Warn("Resources.FindObjectsOfTypeAll с типом " + t.Name + " упал: " + e.Message); 
+  }
+  
+  // Фолбэки, если FindObjectsOfTypeAll ничего не дал
+  var inst = Refl.FieldOrProp(t, "Instance") ?? Refl.FieldOrProp(t, "instance") ?? Refl.FieldOrProp(t, "Current");
+  if (inst != null && !(inst is Type)) return inst;
+  
+  try {
+    var all = UnityEngine.Object.FindObjectsOfType(t);
+    if (all != null && all.Length > 0) return all[0] as UnityEngine.Object;
+  } catch { }
+  
+  return null;
+}
 
     static readonly string[] AddNames = { "Add", "RegisterWeapon", "AddWeaponMount", "AddWeapon",
                                           "Register", "AddMissile", "AddDefinition", "Unlock" };

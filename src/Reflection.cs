@@ -150,10 +150,42 @@ namespace ZirconHV {
     // Multi-Missile bundle discovery via Blueprinter.BundleRegistry.Bundles
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    // v3 mini-dump: when a candidate member is NOT found, dump ALL public
+    // fields/methods of that type into the log so the next fix is final.
+    // ------------------------------------------------------------------
+    public static void DumpMembers(Type t) {
+      if (t == null || Plugin.Log == null) return;
+      try {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("МИНИ-ДАМП ").Append(t.FullName).AppendLine(":");
+        sb.Append("  поля: ");
+        bool first = true;
+        foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy)) {
+          if (f.IsLiteral || f.IsStatic && false) continue;
+          if (!first) sb.Append(", "); first = false;
+          sb.Append(f.FieldType.Name).Append(' ').Append(f.Name);
+        }
+        sb.AppendLine();
+        sb.Append("  методы: ");
+        first = true;
+        foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
+          if (m.IsSpecialName) continue;
+          if (!first) sb.Append(", "); first = false;
+          sb.Append(m.Name).Append('(');
+          var ps = m.GetParameters();
+          for (int i = 0; i < ps.Length; i++) { if (i > 0) sb.Append(", "); sb.Append(ps[i].ParameterType.Name).Append(' ').Append(ps[i].Name); }
+          sb.Append(')');
+        }
+        sb.AppendLine();
+        Info(sb.ToString());
+      } catch (Exception e) { Warn("мини-дамп не удался: " + e.Message); }
+    }
+
     /// <summary>
-    /// Reads Blueprinter.BundleRegistry property/field "Bundles" (List&lt;LoadedBundle&gt;),
-    /// finds the LoadedBundle whose AssetBundle name contains "multi - missile" (or "missile"),
-    /// returns its .AssetBundle (UnityEngine.Object). Null if not found.
+    /// Reads Blueprinter.BundleRegistry PUBLIC FIELD \"Bundles\" (F List&lt;LoadedBundle&gt; per API dump).
+    /// LoadedBundle fields (per dump): bundleName(string), source(string), AssetBundle(UnityEngine.AssetBundle),
+    /// Manifest(PatchManifest). Target: bundleName == \"multi - missile\".
     /// </summary>
     public static AssetBundle FindMultiMissileBundle() {
       Info("Ищу Blueprinter.BundleRegistry через GetTypes() по всем сборкам...");
@@ -162,12 +194,20 @@ namespace ZirconHV {
       Info("Нашел BundleRegistry = " + reg.FullName);
 
       object bundles = null;
-      // instance member on a singleton?
-      var inst = FieldOrProp(reg, "Instance") ?? FieldOrProp(reg, "instance") ?? FieldOrProp(reg, "Current");
-      object holder = inst != null ? inst : (object)reg;
-      bundles = FieldOrProp(holder, "Bundles");
-      if (bundles == null) bundles = FieldOrProp(reg, "bundles");
-      if (bundles == null) { Err("Свойство Bundles не найдено на BundleRegistry."); return null; }
+      // v3 FACT: Bundles is a PUBLIC FIELD. Try field FIRST (static, then on singleton instance).
+      var bf = reg.GetField("Bundles", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+      if (bf != null) { try { bundles = bf.GetValue(null); Info("Читаю статическое поле F List`1 Bundles..."); } catch (Exception e) { Warn("чтение статического Bundles: " + e.Message); } }
+      if (bundles == null) {
+        var inst = FieldOrProp(reg, "Instance") ?? FieldOrProp(reg, "instance") ?? FieldOrProp(reg, "Current");
+        object holder = inst != null ? inst : (object)reg;
+        bf = Field(holder as Type ?? holder.GetType(), "Bundles");
+        if (bf != null) { try { bundles = bf.GetValue(holder is Type ? null : holder); Info("Читаю поле Bundles с экземпляра реестра..."); } catch (Exception e) { Warn("чтение инстанс-поля Bundles: " + e.Message); } }
+      }
+      if (bundles == null) {
+        Err("Поле Bundles не найдено/пусто на BundleRegistry. Мини-дамп публичных членов:");
+        DumpMembers(reg);
+        return null;
+      }
       Info("Читаю список Bundles (" + bundles.GetType().FullName + ")...");
 
       IEnumerable en = bundles as IEnumerable;
@@ -175,36 +215,34 @@ namespace ZirconHV {
 
       AssetBundle fallback = null;
       int seen = 0;
+      Type lbType = null;
       foreach (var lb in en) {
         if (lb == null) continue;
         seen++;
-        AssetBundle ab = null;
-        // LoadedBundle.AssetBundle / .bundle / implicit field of AB type
-        foreach (var cand in new[] { "AssetBundle", "assetBundle", "Bundle", "bundle" }) {
-          ab = FieldOrProp(lb, cand) as AssetBundle;
-          if (ab != null) break;
-        }
+        lbType = lb.GetType();
+        string bn = FieldOrProp(lb, "bundleName") as string;   // v3 FACT: field bundleName
+        AssetBundle ab = FieldOrProp(lb, "AssetBundle") as AssetBundle; // v3 FACT: field AssetBundle
         if (ab == null) {
-          // any field typed UnityEngine.AssetBundle
           foreach (var f in lb.GetType().GetFields(All)) {
             if (f.FieldType == typeof(AssetBundle)) { try { ab = f.GetValue(lb) as AssetBundle; } catch { } if (ab != null) break; }
           }
         }
+        if (bn == null) { try { bn = ab != null ? ab.name : null; } catch { } }
+        if (bn == null) bn = "";
+        Info("Бандл #" + seen + ": bundleName=\"" + bn + "\"" + (ab == null ? " (AssetBundle=null)" : ""));
         if (ab == null) continue;
-        string nm = "";
-        try { nm = ab.name ?? ""; } catch { }
-        if (nm.Length == 0) { var pn = FieldOrProp(lb, "Name") as string; if (pn != null) nm = pn; }
-        Info("Бандл #" + seen + ": \"" + nm + "\"");
-        if (nm.IndexOf("multi - missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nm.IndexOf("multi-missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nm.IndexOf("multimissile", StringComparison.OrdinalIgnoreCase) >= 0) {
-          Info("Нашел бандл Multi-Missile: \"" + nm + "\"");
+        if (string.Equals(bn.Trim(), "multi - missile", StringComparison.OrdinalIgnoreCase) ||
+            bn.IndexOf("multi - missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            bn.IndexOf("multi-missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            bn.IndexOf("multimissile", StringComparison.OrdinalIgnoreCase) >= 0) {
+          Info("Нашел бандл Multi-Missile: bundleName=\"" + bn + "\"");
           return ab;
         }
-        if (fallback == null && nm.IndexOf("missile", StringComparison.OrdinalIgnoreCase) >= 0) fallback = ab;
+        if (fallback == null && bn.IndexOf("missile", StringComparison.OrdinalIgnoreCase) >= 0) fallback = ab;
       }
-      if (fallback != null) { Warn("Точного 'multi - missile' нет, беру бандл с 'missile' в имени."); return fallback; }
-      Err("Бандл Multi-Missile среди " + seen + " записей BundleRegistry не найден.");
+      if (fallback != null) { Warn("Точного 'multi - missile' нет, беру бандл с 'missile' в bundleName."); return fallback; }
+      Err("Бандл Multi-Missile среди " + seen + " записей BundleRegistry.Bundles не найден. Мини-дамп LoadedBundle:");
+      if (lbType != null) DumpMembers(lbType); else Warn("(LoadedBundle: список пуст, элементов нет)");
       return null;
     }
 

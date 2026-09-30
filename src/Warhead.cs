@@ -20,6 +20,38 @@ namespace ZirconHV {
     // aliases used by the rewritten Runner/Registration
     public static void ApplyTo(GameObject clone) { if (clone != null) Scale(clone); }
 
+    /// <summary>
+    /// v3: MissileDefinition has field blastYield (next to mass, finArea).
+    /// Rule: blastYield = orig * (YieldKt / origYieldKt); if orig reads 0 ->
+    /// set blastYield = YieldKt * 1000 and log the value actually set.
+    /// </summary>
+    public static void ApplyToBlastYield(object def) {
+      if (def == null) return;
+      var t = def.GetType();
+      var f = Refl.Field(t, "blastYield");
+      if (f == null || (f.FieldType != typeof(float) && f.FieldType != typeof(double))) {
+        Plugin.Log.LogError("ZirconHV: поле blastYield (float/double) не найдено в " + t.FullName + ". Мини-дамп публичных членов:");
+        Refl.DumpMembers(t);
+        return;
+      }
+      float y = Plugin.YieldKt.Value;
+      try {
+        double orig = Convert.ToDouble(f.GetValue(def));
+        double nv;
+        if (orig > 0.0) {
+          nv = orig * (double)(y / OrigYieldKt);
+          Plugin.Log.LogInfo(string.Format("ZirconHV: blastYield {0} -> {1} (orig*YieldKt/{2})", orig, nv, OrigYieldKt));
+        } else {
+          nv = (double)y * 1000.0;
+          Plugin.Log.LogInfo(string.Format("ZirconHV: blastYield читается как {0} (0) -> ставлю YieldKt*1000 = {1}", orig, nv));
+        }
+        f.SetValue(def, f.FieldType == typeof(float) ? (object)(float)nv : (object)nv);
+        Plugin.Log.LogInfo("ZirconHV: blastYield установлен = " + f.GetValue(def) + " (" + f.FieldType.Name + ")");
+      } catch (Exception e) {
+        Plugin.Log.LogError("ZirconHV: не смог прочитать/записать blastYield: " + e.Message);
+      }
+    }
+
     public static void ApplyTo(object componentOrDefinition) {
       if (componentOrDefinition == null) return;
       float y = Plugin.YieldKt.Value;

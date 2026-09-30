@@ -26,6 +26,7 @@ namespace ZirconHV {
       OverrideOriginal = Config.Bind("Registration","OverrideOriginal",false,"F3: patch original instead of cloning (conflicts with base weapon!).");
       DumpApi = Config.Bind("Debug","DumpBlueprinterApi",false,"true -> dump all Blueprinter-ish types/members to LogOutput.log (run once on live game, then report member names back to the author).");
       if (DumpApi.Value) DumpBlueprinterApi();
+      EncyclopediaPatches.Apply(); // v3: postfix on Encyclopedia.AfterLoad (Tsar Bomba pattern)
       try { var root = new GameObject("ZirconHV_Root"); UnityEngine.Object.DontDestroyOnLoad(root); var r = root.AddComponent<Runner>(); } catch (Exception e) { Log.LogError("root init: " + e); }
       Runner.Instance.Start(); // coroutine-driven, waits for Blueprinter to be ready
       Log.LogInfo(NAME+" "+VERSION+" loaded. YieldKt="+YieldKt.Value);

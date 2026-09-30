@@ -1,10 +1,4 @@
 # Compiled and build artifacts
-*.dll
+*.exe
 bin/
 obj/
-
-# NuGet and MSBuild caches
-*.nuget.props
-*.nuget.targets
-project.assets.json
-project.nuget.cache

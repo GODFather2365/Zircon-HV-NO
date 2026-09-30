@@ -1,5 +1,0 @@
-/workspace/src/obj/Release/ZirconHV.csproj.AssemblyReference.cache
-/workspace/src/obj/Release/ZirconHV.GeneratedMSBuildEditorConfig.editorconfig
-/workspace/src/obj/Release/ZirconHV.csproj.CoreCompileInputs.cache
-/workspace/src/bin/Release/ZirconHeavyVariant.dll
-/workspace/src/obj/Release/ZirconHeavyVariant.dll

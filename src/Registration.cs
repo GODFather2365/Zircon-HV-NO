@@ -6,10 +6,12 @@ using UnityEngine;
 
 namespace ZirconHV {
   /// <summary>
-  /// v5: КОРУТИН ПОЛНОСТЬЮ НЕТ (диагноз v4: «Попытка 1/72» — и возобновления не было,
-  /// механизм resumption умер, unhandled-исключений нет). Вся логика — в Update():
-  /// тики по 2.5 сек через Time.realtimeSinceStartup, ВСЁ тело в try/catch,
-  /// heartbeat каждые 20 сек, OnDestroy() логирует уничтожение компонента.
+  /// v6: КОНЕЧНЫЙ АВТОМАТ ПЕРЕЕХАЛ В САМ Plugin (partial-класс, см. Plugin.Loop.cs).
+  /// Диагноз v5: игра уничтожает GameObject ZirconHV_Root сразу после
+  /// "Chainloader startup complete" (OnDestroy на попытке 0) — поэтому все прошлые
+  /// версии молчали. BaseUnityPlugin — MonoBehaviour, который BepInEx создаёт сам
+  /// и НЕ уничтожает до выхода из игры, отдельный GameObject больше не нужен.
+  /// Логика тиков/стадий (a-f) НЕ изменена — перенесена дословно.
   /// Стадии (переход только при успехе, лог на каждом тике):
   ///   (a) бандл   — AssetBundle.GetAllLoadedAssetBundles() через рефлексию
   ///   (b) префаб  — GetAllAssetNames() -> zirconnuke (нормализованно), fuzzy *zircon*.prefab
@@ -17,12 +19,12 @@ namespace ZirconHV {
   ///   (d) клон    — Instantiate -> RenameClone/RewriteStringIds -> Warhead.blastYield
   ///   (e) регистрация — EncyclopediaLoader.AddWeaponMount/AddUnit (Activator.CreateInstance)
   ///   (f) инжект  — InjectHardpointsV3
-  /// Проигрыш любой стадии НЕ убивает Runner: следующий тик повторит попытку,
+  /// Проигрыш любой стадии НЕ убивает цикл: следующий тик повторит попытку,
   /// пока не кончится бюджет 180 сек (done=true останавливает опрос).
+  /// NOTE: первые ~50 сек попытка видит 0 бандлов — это норма, бандлы
+  /// ("multi - missile") появляются после загрузки Blueprinter.
   /// </summary>
-  public class Runner : MonoBehaviour {
-    public static Runner Instance;
-
+  public partial class Plugin {
     const float TickInterval = 2.5f;
     const int   MaxAttempts  = 72;          // 72 x 2.5s ~= 180 sec
     const float HeartbeatEvery = 20f;
@@ -41,19 +43,14 @@ namespace ZirconHV {
     GameObject clone;                       // клон префаба (стадия d)
     bool cloned;
 
-    void Awake() {
-      if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-      Instance = this;
-      DontDestroyOnLoad(gameObject);
+    /// <summary>Вызывается из Plugin.Awake() (v6: вместо создания ZirconHV_Root+Runner).</summary>
+    void InitLoop() {
       nextAt = Time.realtimeSinceStartup + TickInterval;
       lastHeartbeat = Time.realtimeSinceStartup;
-      Plugin.Log.LogInfo("Runner v5 запущен БЕЗ корутин: Update()-тики каждые 2.5 сек, максимум " + MaxAttempts
-        + " попыток (~180 сек), heartbeat каждые 20 сек, каждое тело тика в try/catch.");
-    }
-
-    void OnDestroy() {
-      Plugin.Log.LogError("Runner УНИЧТОЖЕН (компонент GameObject удалён из сцены). Опрос остановлен на стадии: "
-        + stage + ", попытка " + attempt + ". Если это произошло ДО успеха — причина в удалении объекта ZirconHV_Root.");
+      Log.LogInfo("Цикл v6 запущен ВНУТРИ Plugin (BaseUnityPlugin-объект BepInEx не удаляет): "
+        + "Update()-тики каждые " + TickInterval + " сек, максимум " + MaxAttempts
+        + " попыток (~180 сек), heartbeat каждые " + HeartbeatEvery + " сек, каждое тело тика в try/catch."
+        + " Первые ~50 сек бандлов может быть 0 — это норма (Blueprinter грузится позже).");
     }
 
     void Update() {
@@ -65,24 +62,24 @@ namespace ZirconHV {
       try {
         Tick();
       } catch (Exception e) {
-        Plugin.Log.LogError("Попытка " + attempt + " (стадия " + stage + ") бросила исключение (продолжаю): " + e);
+        Log.LogError("Попытка " + attempt + " (стадия " + stage + ") бросила исключение (продолжаю): " + e);
       }
       if (now - lastHeartbeat >= HeartbeatEvery) {
         lastHeartbeat = now;
-        Plugin.Log.LogInfo("Runner жив, попытка " + attempt + "/" + MaxAttempts + ", стадия: " + stage);
+        Log.LogInfo("Runner жив, попытка " + attempt + "/" + MaxAttempts + ", стадия: " + stage);
       }
       if (!done && attempt >= MaxAttempts) {
         done = true;
-        Plugin.Log.LogError("=== ИТОГ ПРОВАЛА ===");
-        Plugin.Log.LogError("  остановился на стадии: " + stage);
-        Plugin.Log.LogError("  бандл: " + (mmBundle != null ? "\"" + mmBundle.name + "\"" : "не найден (см. список бандлов в логе GetAllLoadedAssetBundles выше)"));
-        Plugin.Log.LogError("  asset name: \"" + (assetName ?? "?") + "\"");
-        Plugin.Log.LogError("  Encyclopedia: " + (enc != null ? "найден" : "НЕ найден (Resources.FindObjectsOfTypeAll пуст, postfix AfterLoad не сработал)"));
-        Plugin.Log.LogError("  клон создан: " + cloned);
-        Plugin.Log.LogError("  jsonKey клона: \"" + (Registration.LastJsonKey ?? "?") + "\"");
-        Plugin.Log.LogError("  AddWeaponMount/AddUnit: " + Registration.LastOpsResult);
-        Plugin.Log.LogError("  инжектировано hardpoint set(s): " + Registration.LastInjectedSets);
-        Plugin.Log.LogError("Бюджет 180 сек исчерпан — опрос остановлен (флаг done), мод больше не шумит.");
+        Log.LogError("=== ИТОГ ПРОВАЛА ===");
+        Log.LogError("  остановился на стадии: " + stage);
+        Log.LogError("  бандл: " + (mmBundle != null ? "\"" + mmBundle.name + "\"" : "не найден (см. список бандлов в логе GetAllLoadedAssetBundles выше)"));
+        Log.LogError("  asset name: \"" + (assetName ?? "?") + "\"");
+        Log.LogError("  Encyclopedia: " + (enc != null ? "найден" : "НЕ найден (Resources.FindObjectsOfTypeAll пуст, postfix AfterLoad не сработал)"));
+        Log.LogError("  клон создан: " + cloned);
+        Log.LogError("  jsonKey клона: \"" + (Registration.LastJsonKey ?? "?") + "\"");
+        Log.LogError("  AddWeaponMount/AddUnit: " + Registration.LastOpsResult);
+        Log.LogError("  инжектировано hardpoint set(s): " + Registration.LastInjectedSets);
+        Log.LogError("Бюджет 180 сек исчерпан — опрос остановлен (флаг done), мод больше не шумит.");
       }
     }
 
@@ -91,56 +88,56 @@ namespace ZirconHV {
       // (a)+(b) бандл и префаб
       if (prefab == null) {
         stage = "a) поиск бандла";
-        Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [a]: ищу загруженный бандл Multi-Missile через GetAllLoadedAssetBundles...");
+        Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [a]: ищу загруженный бандл Multi-Missile через GetAllLoadedAssetBundles...");
         if (mmBundle == null) {
           mmBundle = Refl.FindMultiMissileBundleByApi();
           if (mmBundle == null) {
-            Plugin.Log.LogInfo("Попытка " + attempt + " [a]: по API бандл не найден, пробую фолбэк BundleRegistry.Bundles...");
+            Log.LogInfo("Попытка " + attempt + " [a]: по API бандл не найден, пробую фолбэк BundleRegistry.Bundles...");
             mmBundle = Refl.FindMultiMissileBundle();
           }
         }
         if (mmBundle != null) {
           stage = "b) загрузка префаба";
-          Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [b]: грузу zirconnuke из бандла \"" + mmBundle.name + "\"...");
+          Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [b]: грузу zirconnuke из бандла \"" + mmBundle.name + "\"...");
           string an;
           prefab = Refl.LoadZirconPrefab(mmBundle, out an);
           if (prefab != null) assetName = an;
           else {
-            Plugin.Log.LogError("Попытка " + attempt + " [b]: бандл \"" + mmBundle.name + "\" найден, но префаб zirconnuke в нём нет — сбрасываю бандл и ищу другой.");
+            Log.LogError("Попытка " + attempt + " [b]: бандл \"" + mmBundle.name + "\" найден, но префаб zirconnuke в нём нет — сбрасываю бандл и ищу другой.");
             mmBundle = null;
           }
         }
         if (prefab == null) return;
         Registration.LastAssetName = assetName;
-        Plugin.Log.LogInfo("Стадия (a)+(b) пройдена: префаб \"" + prefab.name + "\" (asset name: \"" + assetName + "\").");
+        Log.LogInfo("Стадия (a)+(b) пройдена: префаб \"" + prefab.name + "\" (asset name: \"" + assetName + "\").");
       }
 
       // (c) Encyclopedia должна существовать ДО клонирования — иначе переписанные
       //     id/name попадут в реестр раньше самой энциклопедии (порядок как в v4).
       if (enc == null) {
         stage = "c) ожидание Encyclopedia";
-        Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [c]: ищу Encyclopedia (Resources.FindObjectsOfTypeAll)...");
+        Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [c]: ищу Encyclopedia (Resources.FindObjectsOfTypeAll)...");
         Type encType = Refl.FindTypeInCSharp("Encyclopedia");
         if (encType == null) {
-          Plugin.Log.LogError("Попытка " + attempt + " [c]: тип Encyclopedia в Assembly-CSharp не найден (продолжаю искать в следующих тиках).");
+          Log.LogError("Попытка " + attempt + " [c]: тип Encyclopedia в Assembly-CSharp не найден (продолжаю искать в следующих тиках).");
           return;
         }
-        Plugin.Log.LogInfo("Нашел тип Encyclopedia = " + encType.FullName);
+        Log.LogInfo("Нашел тип Encyclopedia = " + encType.FullName);
         enc = Registration.FindEncyclopedia(encType);
         if (enc == null) {
-          Plugin.Log.LogInfo("Попытка " + attempt + " [c]:尚无 Encyclopedia 实例，稍后再试 (postfix-статика и поллинг пусты)...");
+          Log.LogInfo("Попытка " + attempt + " [c]:尚无 Encyclopedia 实例，稍后再试 (postfix-статика и поллинг пусты)...");
           return;
         }
-        Plugin.Log.LogInfo("Стадия (c) пройдена: Encyclopedia-экземпляр \"" + ((UnityEngine.Object)enc).name + "\" (" + enc.GetType().FullName + ").");
+        Log.LogInfo("Стадия (c) пройдена: Encyclopedia-экземпляр \"" + ((UnityEngine.Object)enc).name + "\" (" + enc.GetType().FullName + ").");
       }
 
       // (d) клон: Instantiate -> RenameClone/RewriteStringIds -> Warhead.blastYield
       if (!cloned) {
         stage = "d) клонирование префаба";
-        Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [d]: Клонирую префаб " + prefab.name + " (asset name: \"" + assetName + "\")...");
+        Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [d]: Клонирую префаб " + prefab.name + " (asset name: \"" + assetName + "\")...");
         clone = Refl.ClonePrefab(prefab);
         if (clone == null) {
-          Plugin.Log.LogError("Попытка " + attempt + " [d]: Instantiate префаба упал (повторю в следующем тике).");
+          Log.LogError("Попытка " + attempt + " [d]: Instantiate префаба упал (повторю в следующем тике).");
           return;
         }
         clone.name = Plugin.UniqueId;
@@ -150,15 +147,15 @@ namespace ZirconHV {
         Warhead.ApplyTo(clone);
         MeshSwap.TryApplyExternalMesh(clone); // Phase-2 stub
         cloned = true;
-        Plugin.Log.LogInfo("Стадия (d) пройдена: клон \"" + clone.name + "\" создан, ID переписаны на " + Plugin.UniqueId + ".");
+        Log.LogInfo("Стадия (d) пройдена: клон \"" + clone.name + "\" создан, ID переписаны на " + Plugin.UniqueId + ".");
       }
 
       // (e)+(f) регистрация EncyclopediaLoader + инжект хардпоинтов
       stage = "e/f) регистрация + инжект";
-      Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [e]: EncyclopediaLoader.AddWeaponMount/AddUnit + [f] InjectHardpointsV3...");
+      Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [e]: EncyclopediaLoader.AddWeaponMount/AddUnit + [f] InjectHardpointsV3...");
       bool ok = Registration.RegisterAndInject(clone, enc);
       if (ok) { done = true; stage = "завершено"; }
-      else Plugin.Log.LogWarning("Попытка " + attempt + " [e/f]: регистрация/инжект не удались (см. ошибки выше), повторю в следующем тике.");
+      else Log.LogWarning("Попытка " + attempt + " [e/f]: регистрация/инжект не удались (см. ошибки выше), повторю в следующем тике.");
     }
   }
 

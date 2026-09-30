@@ -172,44 +172,54 @@ namespace ZirconHV {
     }
   }
 
-  public static class Registration {
-    const string Tag = "ZirconHV: ";
-    public static string LastAssetName;     // v4 p.5 summary
-    public static int LastInjectedSets;     // v4 p.5 summary
-    public static string LastJsonKey;       // v5 fail-summary
-    public static string LastOpsResult = "не вызывалось"; // v5 fail-summary
+  public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO, object bundleDefSO) {
+  // УДАЛЯЕМ старый поиск компонентов из префаба:
+  // var defs = Refl.ComponentsNamed(clone, "MissileDefinition"); — это больше не нужно
+  
+  // НАЧАЛО НОВОЙ ЛОГИКИ:
+  if (bundleMountSO == null || bundleDefSO == null) {
+    Err("Регистрация невозможна: в бандле не найдены базовые файлы данных Zircon SO.");
+    return false;
+  }
 
-    static void Info(string s) { Plugin.Log.LogInfo(Tag + s); }
-    static void Warn(string s) { Plugin.Log.LogWarning(Tag + s); }
-    static void Err(string s)  { Plugin.Log.LogError(Tag + s); }
+  // Глубоко клонируем ScriptableObject-данные прямо из бандла
+  object mountClone = Refl.CreateLike(bundleMountSO.GetType(), bundleMountSO);
+  object defClone   = Refl.CreateLike(bundleDefSO.GetType(), bundleDefSO);
 
-    // ---------------------------------------------------------------
-    // Unique naming: rewrite id/name-ish strings on clone components
-    // ---------------------------------------------------------------
-    public static void RenameClone(GameObject clone, GameObject original) {
-      Info("Назначаю клону уникальный ID " + Plugin.UniqueId + "...");
-      string origId = null;
-      foreach (var c in clone.GetComponentsInChildren<Component>(true)) {
-        if (c == null) continue;
-        var t = c.GetType();
-        foreach (var f in t.GetFields(Refl.All)) {
-          if (f.FieldType != typeof(string) || f.IsLiteral || f.IsStatic) continue;
-          string v = null; try { v = (string)f.GetValue(c); } catch { continue; }
-          if (v == null) continue;
-          if (origId == null && IsIdField(f.Name)) origId = v;
-          if (IsIdField(f.Name)) { try { f.SetValue(c, Plugin.UniqueId); } catch { } }
-          else if (IsNameField(f.Name)) { try { f.SetValue(c, "Zircon HV (1 Mt)"); } catch { } }
-        }
-        foreach (var p in t.GetProperties(Refl.All)) {
-          if (p.PropertyType != typeof(string) || !p.CanWrite || !IndexOk(p)) continue;
-          string v = null; try { v = (string)p.GetValue(c, null); } catch { continue; }
-          if (v == null) continue;
-          if (IsIdField(p.Name)) { try { p.SetValue(c, Plugin.UniqueId, null); } catch { } }
-          else if (IsNameField(p.Name)) { try { p.SetValue(c, "Zircon HV (1 Mt)", null); } catch { } }
-        }
-      }
-      Info("Готово. Исходный id был: '" + (origId ?? "?") + "'");
+  if (mountClone == null || defClone == null) {
+    Err("Критическая ошибка: не удалось создать независимые копии SO данных для Zircon HV.");
+    return false;
+  }
+
+  // Применяем уникальные ID к нашим новым объектам данных
+  StampUnique(defClone);
+  StampUnique(mountClone);
+  
+  // Привязываем наш мегатонный 3D-визуал (clone) к объекту подвески
+  // В Unity-модах для Nuclear Option префаб визуала обычно назначается в поле "unitPrefab" или "prefab"
+  try {
+    if (!Refl.SetDeep(mountClone, "unitPrefab", clone)) {
+      Refl.SetDeep(mountClone, "prefab", clone);
     }
+    Info("Успешно связали отмасштабированный 3D-префаб с новым WeaponMount SO.");
+  } catch (Exception e) {
+    Warn("Не удалось привязать префаб к WeaponMount: " + e.Message);
+  }
+
+  // Связываем WeaponMount с MissileDefinition (если такое поле есть в структуре игры)
+  foreach (var f in mountClone.GetType().GetFields(Refl.All)) {
+    if (f.FieldType.IsInstanceOfType(defClone)) {
+      try { f.SetValue(mountClone, defClone); Info("Связал WeaponMount." + f.Name + " -> клон MissileDefinition."); } catch { }
+    }
+  }
+
+  // Модифицируем боевую часть под наши Мегатонны
+  Warhead.ApplyToBlastYield(defClone);
+  // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
+  // Дальше оставляем оригинальный вызов инжекции и фолбэков:
+  bool opsOk = RegisterViaOps(clone, enc, defClone, mountClone);
+  bool anyOk = opsOk;
 
     static bool IsIdField(string n) {
       n = n.ToLowerInvariant();

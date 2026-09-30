@@ -142,7 +142,7 @@ namespace ZirconHV {
         }
         clone.name = Plugin.UniqueId;
         clone.SetActive(false);
-        try { DontDestroyOnLoad(clone); } catch { }
+        // v6: DontDestroyOnLoad для клона больше не нужен — корневой объект плагина (BaseUnityPlugin-гобъект) не уничтожается, клон живёт как отдельный неактивный root.
         Registration.RenameClone(clone, prefab);
         Warhead.ApplyTo(clone);
         MeshSwap.TryApplyExternalMesh(clone); // Phase-2 stub

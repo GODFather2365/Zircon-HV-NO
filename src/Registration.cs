@@ -25,32 +25,44 @@ namespace ZirconHV {
     public void Start() { StartCoroutine(Run()); }
 
     IEnumerator Run() {
-      var wait = new WaitForSeconds(3f);
-      Plugin.Log.LogInfo("Runner запущен, жду загрузку Blueprinter и Encyclopedia...");
+      var wait = new WaitForSeconds(2.5f);
+      Plugin.Log.LogInfo("Runner v4 запущен: каждый тик в try/catch, интервал 2.5 сек, до 180 сек, номер попытки в логе.");
 
-      // 1) Wait for BundleRegistry + a loaded Multi-Missile bundle (like Chinese mods wait for Encyclopedia).
+      // 1) Wait for a loaded Multi-Missile bundle via AssetBundle.GetAllLoadedAssetBundles()
+      //    (v4 PRIMARY — BundleRegistry.Bundles is an instance field with no reachable instance).
       AssetBundle mmBundle = null;
+      GameObject prefab = null;
+      string assetName = null;
       int attempts = 0;
-      while (mmBundle == null && attempts++ < 60) {
-        mmBundle = Refl.FindMultiMissileBundle();
-        if (mmBundle == null) {
-          if (attempts == 1 || attempts % 10 == 0)
-            Plugin.Log.LogInfo("Бандл Multi-Missile ещё не доступен (попытка " + attempts + "), жду...");
-          yield return wait;
+      while (prefab == null && attempts < 72) {
+        attempts++;
+        try {
+          Plugin.Log.LogInfo("Попытка " + attempts + "/72: ищу загруженный бандл Multi-Missile через GetAllLoadedAssetBundles...");
+          if (mmBundle == null) {
+            mmBundle = Refl.FindMultiMissileBundleByApi();
+            if (mmBundle == null) {
+              Plugin.Log.LogInfo("Попытка " + attempts + ": по API бандл не найден, пробую фолбэк BundleRegistry.Bundles...");
+              mmBundle = Refl.FindMultiMissileBundle();
+            }
+          }
+          if (mmBundle != null) {
+            prefab = Refl.LoadZirconPrefab(mmBundle, out assetName);
+            if (prefab == null) {
+              Plugin.Log.LogError("Попытка " + attempts + ": бандл \"" + mmBundle.name + "\" найден, но префаб zirconnuke в нём нет — сбрасываю бандл и ищу другой.");
+              mmBundle = null;
+            }
+          }
+        } catch (Exception e) {
+          Plugin.Log.LogError("Попытка " + attempts + " (поиск бандла/префаба) бросила исключение (продолжаю): " + e);
         }
+        if (prefab == null) yield return wait;
       }
-      if (mmBundle == null) {
-        Plugin.Log.LogError("Multi-Missile бандл так и не найден в BundleRegistry за 180 сек. Мод останавливается (без падения).");
-        yield break;
-      }
-
-      // 2) Load the zircon nuke prefab out of that bundle.
-      GameObject prefab = CloneSource.LoadPrefab(mmBundle);
       if (prefab == null) {
-        Plugin.Log.LogError("Префаб zircon nuke не найден внутри бандла Multi-Missile.");
+        Plugin.Log.LogError("Префаб zircon nuke так и не найден за 180 сек (72 попытки). Мод останавливается (без падения).");
         yield break;
       }
-      Plugin.Log.LogInfo("Клонирую префаб " + prefab.name + "...");
+      Registration.LastAssetName = assetName;
+      Plugin.Log.LogInfo("Клонирую префаб " + prefab.name + " (asset name: \"" + assetName + "\")...");
 
       // 3) Clone it.
       GameObject clone = Refl.ClonePrefab(prefab);
@@ -72,22 +84,28 @@ namespace ZirconHV {
       //    then register + inject.
       attempts = 0;
       bool registered = false;
-      while (!registered && attempts++ < 60) {
-        registered = Registration.RegisterAndInject(clone);
+      while (!registered && attempts < 72) {
+        attempts++;
+        try {
+          registered = Registration.RegisterAndInject(clone);
+        } catch (Exception e) {
+          Plugin.Log.LogError("Попытка " + attempts + " (регистрация/инъекция) бросила исключение (продолжаю): " + e);
+        }
         if (!registered) {
-          if (attempts == 1 || attempts % 10 == 0)
-            Plugin.Log.LogInfo("尚无 Encyclopedia 实例，稍后再试 (попытка " + attempts + ")...");
+          Plugin.Log.LogInfo("尚無 Encyclopedia 实例，稍后再试 (попытка " + attempts + "/72)...");
           yield return wait;
         }
       }
       if (!registered)
-        Plugin.Log.LogError("Не удалось зарегистрировать клон за 180 сек — см. логи выше по каждому шагу.");
+        Plugin.Log.LogError("Не удалось зарегистрировать клон за 72 попытки — см. логи выше по каждому шагу.");
       done = true;
     }
   }
 
   public static class Registration {
     const string Tag = "ZirconHV: ";
+    public static string LastAssetName;     // v4 p.5 summary
+    public static int LastInjectedSets;     // v4 p.5 summary
 
     static void Info(string s) { Plugin.Log.LogInfo(Tag + s); }
     static void Warn(string s) { Plugin.Log.LogWarning(Tag + s); }
@@ -215,6 +233,7 @@ namespace ZirconHV {
         try { if (InjectIntoOneSet(s, mountClone)) injected++; }
         catch (Exception e) { Warn("Инъекция в " + s.name + " упала: " + e.Message); }
       }
+      LastInjectedSets = injected;
       if (injected > 0) { Info("HardpointInjector: добавил опции с нашим WeaponMount в " + injected + " hardpoint set(s)."); return true; }
       Warn("Ни один HardpointSet не принял инъекцию. Мини-дамп HardpointSet:");
       Refl.DumpMembers(hpSetT);
@@ -359,7 +378,21 @@ namespace ZirconHV {
       // --- HardpointSet injection via pylonOptions (v3, MK-88 Hydra add-only pattern) ---
       anyOk |= InjectHardpointsV3(mountClone);
 
-      if (anyOk) Info("Инъекция завершена успешно.");
+      if (anyOk) {
+        // v4 p.5: final success summary
+        string jk = null;
+        foreach (var target in new object[] { defClone, mountClone, clone }) {
+          if (target == null) continue;
+          var v = Refl.FieldOrProp(target, "jsonKey") as string;
+          if (v != null) { jk = v; break; }
+        }
+        Info("=== ИТОГ УСПЕХА ===");
+        Info("  asset name префаба: \"" + (LastAssetName ?? "?") + "\"");
+        Info("  jsonKey клона: \"" + (jk ?? "?") + "\" (уникальный ID = " + Plugin.UniqueId + ")");
+        Info("  EncyclopediaLoader.AddWeaponMount/AddUnit: " + (opsOk ? "УСПЕХ" : "НЕТ (использован фолбэк)"));
+        Info("  инжектировано hardpoint set(s): " + LastInjectedSets);
+        Info("Инъекция завершена успешно.");
+      }
       return anyOk;
     }
 
@@ -372,11 +405,26 @@ namespace ZirconHV {
 
     // ---------------- helpers ----------------
 
-    /// <summary>Finds a live scene instance (or singleton) of the given type.</summary>
+    /// <summary>
+    /// Finds a live instance of the given type. v4 p.2: PRIMARY = Resources.FindObjectsOfTypeAll(type)
+    /// (reflection MakeGenericMethod, first non-null) — catches prefassets/inactive too;
+    /// secondary = static Instance/instance/Current; tertiary = Object.FindObjectsOfType.
+    /// </summary>
     static object FindSceneInstance(Type t) {
+      if (t == null) return null;
+      try {
+        var gm = typeof(Resources).GetMethod("FindObjectsOfTypeAll",
+          BindingFlags.Public | BindingFlags.Static);
+        if (gm != null) {
+          var made = gm.MakeGenericMethod(t);
+          var arr = made.Invoke(null, null) as UnityEngine.Object[];
+          if (arr != null && arr.Length > 0) {
+            foreach (var o in arr) if (o != null) { Info("Resources.FindObjectsOfTypeAll<" + t.Name + "> -> " + o.name + " (" + o.GetType().FullName + ")"); return o; }
+          }
+        }
+      } catch (Exception e) { Warn("Resources.FindObjectsOfTypeAll<" + t.Name + "> упал: " + e.Message); }
       var inst = Refl.FieldOrProp(t, "Instance") ?? Refl.FieldOrProp(t, "instance") ?? Refl.FieldOrProp(t, "Current");
       if (inst != null && !(inst is Type)) return inst;
-      // MonoBehaviour search via Resources.FindObjectsOfTypeAll on Component-derived types
       try {
         var all = UnityEngine.Object.FindObjectsOfType(t);
         if (all != null && all.Length > 0) return all[0] as UnityEngine.Object;

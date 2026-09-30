@@ -187,6 +187,90 @@ namespace ZirconHV {
     /// LoadedBundle fields (per dump): bundleName(string), source(string), AssetBundle(UnityEngine.AssetBundle),
     /// Manifest(PatchManifest). Target: bundleName == \"multi - missile\".
     /// </summary>
+    static string Norm(string s) {
+      if (s == null) return "";
+      var sb = new System.Text.StringBuilder(s.Length);
+      foreach (char c in s.ToLowerInvariant())
+        if (!(c == ' ' || c == '-' || c == '_' || c == '\\' || c == '/')) sb.Append(c);
+      return sb.ToString();
+    }
+
+    /// <summary>
+    /// v4 PRIMARY: UnityEngine.AssetBundle.GetAllLoadedAssetBundles() (static API, MK-88 Hydra
+    /// "Reusing loaded AssetBundle" pattern). BundleRegistry.Bundles is an INSTANCE field with no
+    /// reachable instance -> dead end (confirmed by first-run log).
+    /// Logs ALL loaded bundle names once, picks the one whose normalized name contains
+    /// "missile" or "multi".
+    /// </summary>
+    public static AssetBundle FindMultiMissileBundleByApi() {
+      System.Collections.Generic.List<object> all = null;
+      try {
+        var m = typeof(AssetBundle).GetMethod("GetAllLoadedAssetBundles",
+              BindingFlags.Public | BindingFlags.Static);
+        if (m == null) { Err("AssetBundle.GetAllLoadedAssetBundles не найден в UnityEngine.AssetBundleModule."); return null; }
+        var en = m.Invoke(null, null) as System.Collections.IEnumerable;
+        if (en == null) { Err("GetAllLoadedAssetBundles вернул null."); return null; }
+        all = new System.Collections.Generic.List<object>();
+        foreach (var o in en) all.Add(o);
+      } catch (Exception e) { Err("GetAllLoadedAssetBundles упал: " + e.Message); return null; }
+
+      Info("Залогирую ВСЕ загруженные бандлы (" + all.Count + " шт.)...");
+      var names = new System.Text.StringBuilder();
+      AssetBundle byKeyword = null, fallback = null;
+      foreach (var o in all) {
+        var ab = o as AssetBundle;
+        if (ab == null) continue;
+        string n = ""; try { n = ab.name ?? ""; } catch { }
+        names.Append("\n  - ").Append(n);
+        string nn = Norm(n);
+        if (byKeyword == null && (nn.Contains("missile") || nn.Contains("multi"))) {
+          Info("Нашел бандл по ключевому слову: \"" + n + "\"");
+          byKeyword = ab;
+        }
+        if (fallback == null && nn.Contains("zircon")) fallback = ab;
+      }
+      Info("Список имён бандлов:" + names.ToString());
+      if (byKeyword != null) return byKeyword;
+      if (fallback != null) { Warn("Точного 'missile/multi' нет, беру бандл с 'zircon' в имени."); return fallback; }
+      Err("Среди " + all.Count + " загруженных бандлов нет подходящего (missile/multi). См. список выше.");
+      return null;
+    }
+
+    /// <summary>
+    /// Loads the zircon nuke prefab from a bundle: GetAllAssetNames() -> normalized name containing
+    /// "zirconnuke" -> LoadAsset&lt;GameObject&gt;(name). Exact asset name returned via out param.
+    /// </summary>
+    public static GameObject LoadZirconPrefab(AssetBundle ab, out string assetName) {
+      assetName = null;
+      if (ab == null) return null;
+      string[] list = null;
+      try { list = ab.GetAllAssetNames(); } catch (Exception e) { Err("GetAllAssetNames упал: " + e.Message); return null; }
+      if (list == null) return null;
+      Info("Бандл содержит " + list.Length + " ассетов. Ищу имя с \"zirconnuke\" (нормализация)...");
+      foreach (var n in list) {
+        if (!Norm(n).Contains("zirconnuke")) continue;
+        GameObject go = null;
+        try { go = ab.LoadAsset<GameObject>(n); } catch (Exception e) { Err("LoadAsset<GameObject>(\"" + n + "\") упал: " + e.Message); continue; }
+        if (go == null) { Warn("Ассет \"" + n + "\" — не GameObject, пробую дальше."); continue; }
+        assetName = n;
+        Info("Нашел asset name: \"" + n + "\"");
+        return go;
+      }
+      foreach (var n in list) {
+        string nn = Norm(n);
+        if (!nn.Contains("zircon") || !nn.EndsWith("prefab")) continue;
+        var go = ab.LoadAsset<GameObject>(n);
+        if (go != null) { assetName = n; Warn("Точного zirconnuke нет, взял fuzzy: \"" + n + "\""); return go; }
+      }
+      Err("В бандле нет ассета с \"zirconnuke\" в имени. Логирую все имена:");
+      foreach (var n in list) Info("  asset: " + n);
+      return null;
+    }
+
+    /// <summary>
+    /// FALLBACK ONLY (v4): Blueprinter.BundleRegistry field "Bundles" — instance field, no reachable
+    /// instance confirmed by first-run log. Kept as best-effort secondary path.
+    /// </summary>
     public static AssetBundle FindMultiMissileBundle() {
       Info("Ищу Blueprinter.BundleRegistry через GetTypes() по всем сборкам...");
       Type reg = FindType("Blueprinter.BundleRegistry");

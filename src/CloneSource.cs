@@ -139,5 +139,16 @@ namespace ZirconHV {
       }
       return null;
     }
+
+    // v2 entry point: load the zircon nuke prefab from a bundle already found via BundleRegistry
+    public static GameObject LoadPrefab(AssetBundle ab) {
+      Plugin.Log.LogInfo("Ищу префаб zircon nuke внутри бандла \"" + (ab != null ? ab.name : "?") + "\"...");
+      var go = LoadPrefabInto(ab);
+      if (go == null) Plugin.Log.LogError("Префаб zircon nuke не найден в переданном бандле.");
+      else Plugin.Log.LogInfo("Нашел префаб " + go.name + " в бандле.");
+      return go;
+    }
+
+    static GameObject LoadPrefabInto(AssetBundle ab) { return TryLoadFromBundle(ab); }
   }
 }

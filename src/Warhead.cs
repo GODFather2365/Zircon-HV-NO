@@ -17,6 +17,37 @@ namespace ZirconHV {
 
     const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+    // aliases used by the rewritten Runner/Registration
+    public static void ApplyTo(GameObject clone) { if (clone != null) Scale(clone); }
+
+    public static void ApplyTo(object componentOrDefinition) {
+      if (componentOrDefinition == null) return;
+      float y = Plugin.YieldKt.Value;
+      if (y <= 0f) return;
+      float k = Mathf.Pow(y / OrigYieldKt, 1f / 3f);
+      float lin = y / OrigYieldKt;
+      int touched = 0;
+      var t = componentOrDefinition.GetType();
+      foreach (var f in t.GetFields(All)) {
+        if (f.IsStatic) continue;
+        if (f.FieldType != typeof(float) && f.FieldType != typeof(double)
+            && f.FieldType != typeof(int)) continue;
+        var ln = f.Name.ToLowerInvariant();
+        bool isRadius = false, isLinear = false;
+        foreach (var r in RadiusNeedles) if (ln.Contains(r)) { isRadius = true; break; }
+        if (!isRadius) foreach (var r in LinearNeedles) if (ln.Contains(r)) { isLinear = true; break; }
+        if (!isRadius && !isLinear) continue;
+        try {
+          double v = Convert.ToDouble(f.GetValue(componentOrDefinition));
+          double nv = isLinear ? v * lin : v * k;
+          f.SetValue(componentOrDefinition, f.FieldType == typeof(int) ? (object)(int)nv
+                        : f.FieldType == typeof(float) ? (object)(float)nv : (object)nv);
+          touched++;
+        } catch { }
+      }
+      Plugin.Log.LogInfo("warhead scaled on " + t.Name + ": fields touched=" + touched);
+    }
+
     public static void Scale(GameObject clone) {
       float y = Plugin.YieldKt.Value;
       if (y <= 0f) { Plugin.Log.LogWarning("YieldKt<=0, skipping warhead scaling."); return; }

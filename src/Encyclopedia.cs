@@ -17,8 +17,8 @@ namespace ZirconHV {
       int set = 0;
       foreach (var comp in clone.GetComponentsInChildren<Component>(true)) {
         if (comp == null) continue;
-        foreach (var n in NameNeedles) if (Reflection.SetDeep(comp, n, disp)) set++;
-        foreach (var n in DescNeedles) if (Reflection.SetDeep(comp, n, desc)) set++;
+        foreach (var n in NameNeedles) if (Refl.SetDeep(comp, n, disp)) set++;
+        foreach (var n in DescNeedles) if (Refl.SetDeep(comp, n, desc)) set++;
       }
       Plugin.Log.LogInfo("encyclopedia/UI name patched on " + set + " fields (" + disp + ")");
     }

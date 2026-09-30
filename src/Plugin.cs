@@ -16,6 +16,7 @@ namespace ZirconHV {
     internal static ConfigEntry<float> YieldKt; internal static ConfigEntry<string> PrefabPath;
     internal static ConfigEntry<bool> EnableTwinFallback, OverrideOriginal, DumpApi;
     internal static ManualLogSource Log;
+    public static Plugin Instance; public Plugin() { Instance = this; }
 
     void Awake() {
       Log = Logger;

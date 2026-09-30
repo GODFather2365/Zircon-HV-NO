@@ -172,9 +172,20 @@ namespace ZirconHV {
     }
   }
 
-  public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO, object bundleDefSO) {
-  // УДАЛЯЕМ старый поиск компонентов из префаба:
-  // var defs = Refl.ComponentsNamed(clone, "MissileDefinition"); — это больше не нужно
+public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO, object bundleDefSO) {
+  if (bundleMountSO == null || bundleDefSO == null) return false;
+
+  // Клонируем ScriptableObject-данные из бандла донора
+  object mountClone = Refl.CreateLike(bundleMountSO.GetType(), bundleMountSO);
+  object defClone   = Refl.CreateLike(bundleDefSO.GetType(), bundleDefSO);
+
+  // Вот здесь mountClone существует! Принудительно задаем ему новый JSON-ключ:
+  Refl.SetDeep(mountClone, "jsonKey", CloneJsonKey); 
+  Refl.SetDeep(defClone, "jsonKey", CloneJsonKey); // На всякий случай и дефинишену
+
+  // Дальнейшая настройка...
+  StampUnique(defClone);
+  StampUnique(mountClone);
   
   // НАЧАЛО НОВОЙ ЛОГИКИ:
   if (bundleMountSO == null || bundleDefSO == null) {

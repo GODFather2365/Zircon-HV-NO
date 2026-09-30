@@ -1,2 +1,2 @@
-(empty)bin/
-obj/
+# Compiled/Binary files
+*.dll

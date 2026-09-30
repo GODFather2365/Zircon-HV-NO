@@ -26,7 +26,8 @@ namespace ZirconHV {
       OverrideOriginal = Config.Bind("Registration","OverrideOriginal",false,"F3: patch original instead of cloning (conflicts with base weapon!).");
       DumpApi = Config.Bind("Debug","DumpBlueprinterApi",false,"true -> dump all Blueprinter-ish types/members to LogOutput.log (run once on live game, then report member names back to the author).");
       if (DumpApi.Value) DumpBlueprinterApi();
-      EncyclopediaPatches.Apply(); // v3: postfix on Encyclopedia.AfterLoad (Tsar Bomba pattern)
+      // v6 ПРАВКА 1: Harmony-postfix на Encyclopedia.AfterLoad УБРАН из потока загрузки.
+      // Encyclopedia ищется только поллингом Resources.FindObjectsOfTypeAll(Type) в Update().
       // v6: НИКАКОГО отдельного GameObject/Runner-компонента — игра удаляла ZirconHV_Root
       // сразу после "Chainloader startup complete" (OnDestroy на попытке 0).
       // Конечный автомат стадий a-f живёт в Update() самого Plugin (BaseUnityPlugin —

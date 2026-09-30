@@ -237,34 +237,56 @@ namespace ZirconHV {
     }
 
     /// <summary>
-    /// Loads the zircon nuke prefab from a bundle: GetAllAssetNames() -> normalized name containing
-    /// "zirconnuke" -> LoadAsset&lt;GameObject&gt;(name). Exact asset name returned via out param.
+    /// v6 ПРАВКА 2: результат скана бандла по "zircon"-ассетам.
+    /// WeaponMount SO (тип по имени) + GameObject-префаб (ТОЧНЫЙ "zircon nuke.prefab").
     /// </summary>
-    public static GameObject LoadZirconPrefab(AssetBundle ab, out string assetName) {
-      assetName = null;
-      if (ab == null) return null;
+    public class ZirconAssets {
+      public GameObject Prefab;
+      public string PrefabName;
+      public object MountSO;
+      public string MountSOName;
+    }
+
+    static bool IsExactNuke(string n) {
+      if (n == null) return false;
+      string s = n.Replace('\\', '/');
+      int i = s.LastIndexOf('/');
+      if (i >= 0) s = s.Substring(i + 1);
+      return s.Equals("zircon nuke.prefab", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// v6 ПРАВКА 2: перебор GetAllAssetNames() для имён, содержащих "zircon":
+    /// LoadAsset(name) -> раскладываем по типам: GetType().Name == "WeaponMount" ->
+    /// исходный WeaponMount SO; obj is GameObject -> кандидат-префаб,
+    /// ТОЧНЫЙ "zircon nuke.prefab" предпочитается "double ext".
+    /// </summary>
+    public static ZirconAssets LoadZirconAssets(AssetBundle ab) {
+      var res = new ZirconAssets();
+      if (ab == null) return res;
       string[] list = null;
-      try { list = ab.GetAllAssetNames(); } catch (Exception e) { Err("GetAllAssetNames упал: " + e.Message); return null; }
-      if (list == null) return null;
-      Info("Бандл содержит " + list.Length + " ассетов. Ищу имя с \"zirconnuke\" (нормализация)...");
+      try { list = ab.GetAllAssetNames(); } catch (Exception e) { Err("GetAllAssetNames упал: " + e.Message); return res; }
+      if (list == null) return res;
+      Info("Бандл содержит " + list.Length + " ассетов. Перебираю имена с \"zircon\", гружю LoadAsset(name), разлагываю по типам...");
       foreach (var n in list) {
-        if (!Norm(n).Contains("zirconnuke")) continue;
-        GameObject go = null;
-        try { go = ab.LoadAsset<GameObject>(n); } catch (Exception e) { Err("LoadAsset<GameObject>(\"" + n + "\") упал: " + e.Message); continue; }
-        if (go == null) { Warn("Ассет \"" + n + "\" — не GameObject, пробую дальше."); continue; }
-        assetName = n;
-        Info("Нашел asset name: \"" + n + "\"");
-        return go;
+        if (!Norm(n).Contains("zircon")) continue;
+        object obj = null;
+        try { obj = ab.LoadAsset(n); } catch (Exception e) { Err("LoadAsset(\"" + n + "\") упал: " + e.Message); continue; }
+        if (obj == null) { Warn("Ассет \"" + n + "\" = null, пропускаю."); continue; }
+        string tn = obj.GetType().Name;
+        Info("Ассет \"" + n + "\" -> тип " + tn);
+        if (tn == "WeaponMount") {
+          if (res.MountSO == null) { res.MountSO = obj; res.MountSOName = n; Info("Это исходный WeaponMount SO: \"" + n + "\""); }
+        } else if (obj is GameObject) {
+          var go = (GameObject)obj;
+          bool exact = IsExactNuke(n), haveExact = IsExactNuke(res.PrefabName);
+          if (exact && !haveExact) { res.Prefab = go; res.PrefabName = n; Info("Кандидат-префаб (ТОЧНЫЙ \"zircon nuke.prefab\"): \"" + n + "\""); }
+          else if (res.Prefab == null && !haveExact) { res.Prefab = go; res.PrefabName = n; Warn("Точного \"zircon nuke.prefab\" пока нет, беру GameObject \"" + n + "\" (fuzzy)."); }
+          else Warn("Пропускаю лишний/дубль-расширение префаб \"" + n + "\" (взят \"" + res.PrefabName + "\").");
+        } else Warn("Ассет \"" + n + "\" типа " + tn + " игнорирую.");
       }
-      foreach (var n in list) {
-        string nn = Norm(n);
-        if (!nn.Contains("zircon") || !nn.EndsWith("prefab")) continue;
-        var go = ab.LoadAsset<GameObject>(n);
-        if (go != null) { assetName = n; Warn("Точного zirconnuke нет, взял fuzzy: \"" + n + "\""); return go; }
-      }
-      Err("В бандле нет ассета с \"zirconnuke\" в имени. Логирую все имена:");
-      foreach (var n in list) Info("  asset: " + n);
-      return null;
+      if (res.Prefab == null) { Err("В бандле нет GameObject с \"zircon\" в имени. Логирую все имена:"); foreach (var n in list) Info("  asset: " + n); }
+      return res;
     }
 
     /// <summary>

@@ -1,0 +1,5 @@
+is_global = true
+build_property.RootNamespace = ZirconHV
+build_property.ProjectDir = /workspace/src/
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 

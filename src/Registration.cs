@@ -39,6 +39,7 @@ namespace ZirconHV {
     AssetBundle mmBundle;
     GameObject prefab;
     string assetName;
+    object bundleMountSO;   // v6 ПРАВКА 2: WeaponMount SO прямо из бандла
     object enc;                             // экземпляр Encyclopedia
     GameObject clone;                       // клон префаба (стадия d)
     bool cloned;
@@ -74,7 +75,7 @@ namespace ZirconHV {
         Log.LogError("  остановился на стадии: " + stage);
         Log.LogError("  бандл: " + (mmBundle != null ? "\"" + mmBundle.name + "\"" : "не найден (см. список бандлов в логе GetAllLoadedAssetBundles выше)"));
         Log.LogError("  asset name: \"" + (assetName ?? "?") + "\"");
-        Log.LogError("  Encyclopedia: " + (enc != null ? "найден" : "НЕ найден (Resources.FindObjectsOfTypeAll пуст, postfix AfterLoad не сработал)"));
+        Log.LogError("  Encyclopedia: " + (enc != null ? "найден" : "НЕ найден (Resources.FindObjectsOfTypeAll(Type) пуст во всех попытках)"));
         Log.LogError("  клон создан: " + cloned);
         Log.LogError("  jsonKey клона: \"" + (Registration.LastJsonKey ?? "?") + "\"");
         Log.LogError("  AddWeaponMount/AddUnit: " + Registration.LastOpsResult);
@@ -97,13 +98,13 @@ namespace ZirconHV {
           }
         }
         if (mmBundle != null) {
-          stage = "b) загрузка префаба";
-          Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [b]: грузу zirconnuke из бандла \"" + mmBundle.name + "\"...");
-          string an;
-          prefab = Refl.LoadZirconPrefab(mmBundle, out an);
-          if (prefab != null) assetName = an;
-          else {
-            Log.LogError("Попытка " + attempt + " [b]: бандл \"" + mmBundle.name + "\" найден, но префаб zirconnuke в нём нет — сбрасываю бандл и ищу другой.");
+          stage = "b) загрузка zircon-ассетов";
+          Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [b]: GetAllAssetNames() бандла \"" + mmBundle.name + "\", имена с \"zircon\" гружу LoadAsset(name) и раскладываю по типам (v6 ПРАВКА 2)...");
+          var za = Refl.LoadZirconAssets(mmBundle);
+          prefab = za.Prefab; assetName = za.PrefabName; bundleMountSO = za.MountSO;
+          if (bundleMountSO != null) Log.LogInfo("[b] Найден исходный WeaponMount SO в бандле: \"" + za.MountSOName + "\" (тип " + bundleMountSO.GetType().FullName + ").");
+          if (prefab == null) {
+            Log.LogError("Попытка " + attempt + " [b]: бандл \"" + mmBundle.name + "\" найден, но GameObject-префаба с \"zircon\" в нём нет — сбрасываю бандл и ищу другой.");
             mmBundle = null;
           }
         }
@@ -116,16 +117,22 @@ namespace ZirconHV {
       //     id/name попадут в реестр раньше самой энциклопедии (порядок как в v4).
       if (enc == null) {
         stage = "c) ожидание Encyclopedia";
-        Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [c]: ищу Encyclopedia (Resources.FindObjectsOfTypeAll)...");
+        Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [c]: ищу Encyclopedia (v6 ПРАВКА 1: прямое не-generic Resources.FindObjectsOfTypeAll(Type), без Harmony-postfix)...");
         Type encType = Refl.FindTypeInCSharp("Encyclopedia");
         if (encType == null) {
           Log.LogError("Попытка " + attempt + " [c]: тип Encyclopedia в Assembly-CSharp не найден (продолжаю искать в следующих тиках).");
           return;
         }
         Log.LogInfo("Нашел тип Encyclopedia = " + encType.FullName);
-        enc = Registration.FindEncyclopedia(encType);
+        UnityEngine.Object[] all = null;
+        try { all = UnityEngine.Resources.FindObjectsOfTypeAll(encType); }
+        catch (Exception e) { Log.LogError("Попытка " + attempt + " [c]: Resources.FindObjectsOfTypeAll(Type) упал: " + e.Message); return; }
+        if (all != null && all.Length > 0) {
+          Log.LogInfo("[c] Resources.FindObjectsOfTypeAll(Encyclopedia) вернул " + all.Length + " объектов, беру первый ненулевой...");
+          foreach (var o in all) if (o != null) { enc = o; break; }
+        }
         if (enc == null) {
-          Log.LogInfo("Попытка " + attempt + " [c]:尚无 Encyclopedia 实例，稍后再试 (postfix-статика и поллинг пусты)...");
+          Log.LogInfo("Попытка " + attempt + " [c]:尚无 Encyclopedia 实例，稍后再试 (FindObjectsOfTypeAll пуст)...");
           return;
         }
         Log.LogInfo("Стадия (c) пройдена: Encyclopedia-экземпляр \"" + ((UnityEngine.Object)enc).name + "\" (" + enc.GetType().FullName + ").");
@@ -150,10 +157,14 @@ namespace ZirconHV {
         Log.LogInfo("Стадия (d) пройдена: клон \"" + clone.name + "\" создан, ID переписаны на " + Plugin.UniqueId + ".");
       }
 
+      // v6 ПРАВКА 3: ДО AddWeaponMount переписываем jsonKey клона на "ZirconHV_1Mt"
+      // (и все string-поля, равные старому jsonKey) — иначе словим Duplicate WeaponMount JSON key.
+      Registration.RewriteJsonKey(clone, bundleMountSO);
+
       // (e)+(f) регистрация EncyclopediaLoader + инжект хардпоинтов
       stage = "e/f) регистрация + инжект";
       Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [e]: EncyclopediaLoader.AddWeaponMount/AddUnit + [f] InjectHardpointsV3...");
-      bool ok = Registration.RegisterAndInject(clone, enc);
+      bool ok = Registration.RegisterAndInject(clone, enc, bundleMountSO);
       if (ok) { done = true; stage = "завершено"; }
       else Log.LogWarning("Попытка " + attempt + " [e/f]: регистрация/инжект не удались (см. ошибки выше), повторю в следующем тике.");
     }
@@ -268,121 +279,114 @@ namespace ZirconHV {
     }
 
     // ---------------------------------------------------------------
-    // v3 Hardpoint injection (Multi-Missile open source pattern, BSD):
-    //   Hardpoint fields: mount, spawnedPrefab, pylonOptions(array);
-    //   pylonOptions element fields: mount, renderer.
-    //   HardpointSet collection field: hardpoints/Hardpoints/_hardpoints/pylons.
-    //   Add-only: clone an existing option, swap its mount -> ours, append.
+    // v6 ПРАВКА 4: инъекция в лоад-аут — ДОСЛОВНО по открытому коду Multi-Missile
+    // (brimstonerotarypanelpatch.cs, BSD):
+    //   Hardpoint.mount, Hardpoint.spawnedPrefab, Hardpoint.pylonOptions (массив);
+    //   элемент pylonOptions: поля mount, renderer.
+    //   Для каждого Hardpoint из Resources.FindObjectsOfTypeAll(hpT): если текущий
+    //   mount != null и его info.weaponName содержит "Zircon" (оригинал MM) ->
+    //   новый массив pylonOptions длиной +1, копия ПОСЛЕДНЕЙ опции,
+    //   optMountF.SetValue(копия, mountClone), optRenderF.SetValue(копия, null),
+    //   optsF.SetValue(hp, новый массив). Add-only, как MK-88 Hydra.
     // ---------------------------------------------------------------
-    static readonly string[] HpSetFields = { "hardpoints", "Hardpoints", "_hardpoints", "pylons" };
-    static readonly string[] MountFieldNames = { "mount", "weaponMount", "WeaponMount" };
-    static readonly string[] OptArrayFieldNames = { "pylonOptions", "options", "pylonOptionsList" };
-    static readonly string[] RendererFieldNames = { "renderer", "meshRenderer" };
-
     static bool InjectHardpointsV3(object mountClone) {
       if (mountClone == null) { Err("InjectHardpointsV3: mountClone=null."); return false; }
-      Type hpSetT = Refl.FindTypeInCSharp("HardpointSet");
-      if (hpSetT == null) { Err("Тип HardpointSet не найден."); return false; }
-      UnityEngine.Object[] sets;
-      try { sets = UnityEngine.Object.FindObjectsOfType(hpSetT); }
-      catch (Exception e) { Err("FindObjectsOfType(HardpointSet) упал: " + e.Message); return false; }
-      Info("Найдено HardpointSet в сцене: " + sets.Length + ". Ищу поле-коллекцию среди " + string.Join("/", HpSetFields) + "...");
-      int injected = 0;
-      foreach (var s in sets) {
-        if (s == null) continue;
-        try { if (InjectIntoOneSet(s, mountClone)) injected++; }
-        catch (Exception e) { Warn("Инъекция в " + s.name + " упала: " + e.Message); }
+      Type hpT = Refl.FindTypeInCSharp("Hardpoint");
+      if (hpT == null) { Err("Тип Hardpoint не найден в Assembly-CSharp."); return false; }
+
+      FieldInfo mountF = hpT.GetField("mount", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+      FieldInfo optsF  = hpT.GetField("pylonOptions", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+      if (mountF == null || optsF == null) {
+        Err("У Hardpoint не найдены поля mount/pylonOptions (mount=" + (mountF != null) + ", pylonOptions=" + (optsF != null) + "). Мини-дамп ВСЕХ публичных членов Hardpoint:");
+        Refl.DumpMembers(hpT);
+        return false;
       }
-      LastInjectedSets = injected;
-      if (injected > 0) { Info("HardpointInjector: добавил опции с нашим WeaponMount в " + injected + " hardpoint set(s)."); return true; }
-      Warn("Ни один HardpointSet не принял инъекцию. Мини-дамп HardpointSet:");
-      Refl.DumpMembers(hpSetT);
+      Info("Нашел поле Hardpoint.mount : " + mountF.FieldType.FullName);
+      Info("Нашел поле Hardpoint.pylonOptions : " + optsF.FieldType.FullName);
+      Type optT = optsF.FieldType.IsArray ? optsF.FieldType.GetElementType() : null;
+      if (optT == null) { Err("Hardpoint.pylonOptions — не массив (" + optsF.FieldType.FullName + "). Мини-дамп Hardpoint:"); Refl.DumpMembers(hpT); return false; }
+      FieldInfo optMountF  = optT.GetField("mount", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+      FieldInfo optRenderF = optT.GetField("renderer", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+      if (optMountF == null || optRenderF == null) {
+        Err("У элемента pylonOptions (" + optT.Name + ") не найдены поля mount/renderer (mount=" + (optMountF != null) + ", renderer=" + (optRenderF != null) + "). Мини-дамп " + optT.Name + ":");
+        Refl.DumpMembers(optT);
+        return false;
+      }
+      Info("Нашел поле " + optT.Name + ".mount : " + optMountF.FieldType.FullName);
+      Info("Нашел поле " + optT.Name + ".renderer : " + optRenderF.FieldType.FullName);
+
+      UnityEngine.Object[] hps = null;
+      try { hps = UnityEngine.Resources.FindObjectsOfTypeAll(hpT); }
+      catch (Exception e) { Err("Resources.FindObjectsOfTypeAll(Hardpoint) упал: " + e.Message); return false; }
+      Info("Resources.FindObjectsOfTypeAll(Hardpoint) вернул " + hps.Length + " объектов. Ищу те, у которых info.weaponName содержит \"Zircon\"...");
+
+      int extended = 0, matched = 0;
+      foreach (var o in hps) {
+        if (o == null) continue;
+        try {
+          object hp = o;
+          object curMount = null;
+          try { curMount = mountF.GetValue(hp); } catch { }
+          if (curMount == null) continue;               // требование: текущий mount != null
+          string wn = GetWeaponName(curMount);          // info.weaponName через рефлексию
+          if (wn == null || wn.IndexOf("Zircon", StringComparison.OrdinalIgnoreCase) < 0) continue;
+          matched++;
+          Array opts = optsF.GetValue(hp) as Array;
+          if (opts == null) { Warn("Hardpoint с mount \"" + wn + "\": pylonOptions=null, расширять не из чего."); continue; }
+          if (opts.Length == 0) { Warn("Hardpoint с mount \"" + wn + "\": pylonOptions пуст — копии последней опции нет, пропускаю."); continue; }
+          object last = opts.GetValue(opts.Length - 1);
+          object copy = ShallowCopyOption(last, optT);
+          if (copy == null) continue;
+          optMountF.SetValue(copy, mountClone);         // наш клон WeaponMount
+          optRenderF.SetValue(copy, null);              // рендер оригинала не тащим
+          var newArr = Array.CreateInstance(optT, opts.Length + 1);
+          for (int q = 0; q < opts.Length; q++) newArr.SetValue(opts.GetValue(q), q);
+          newArr.SetValue(copy, opts.Length);
+          optsF.SetValue(hp, newArr);                   // add-only
+          extended++;
+          Info("Hardpoint (\"" + ((UnityEngine.Object)hp).name + "\"): pylonOptions[" + opts.Length + "] добавлен, mount->jsonKey=\"" + CloneJsonKey + "\" (исходный weaponName=\"" + wn + "\").");
+        } catch (Exception e) { Warn("Инъекция в один Hardpoint упала: " + e.Message); }
+      }
+      LastInjectedSets = extended;
+      if (extended > 0) { Info("HardpointInjector: расширено хардпоинтов = " + extended + " (совпало с \"Zircon\": " + matched + ")."); return true; }
+      Warn("Ни один Hardpoint не подошёл (совпадений \"Zircon\" = " + matched + "). Это нормально до загрузки ангаров/сцены — повторю в следующем тике.");
       return false;
     }
 
-    static bool InjectIntoOneSet(UnityEngine.Object set, object mountClone) {
-      Type t = set.GetType();
-      Array hps = null; string hpFieldName = null;
-      foreach (var name in HpSetFields) {
-        var arr = Refl.FieldOrProp(set, name) as Array;
-        if (arr != null && arr.Length > 0) { hps = arr; hpFieldName = name; break; }
-      }
-      if (hps == null) { Warn(t.Name + " (" + set.name + "): поле хардпоинтов не найдено/пусто (" + string.Join("/", HpSetFields) + ")."); return false; }
-      Info("Set \"" + set.name + "\": поле " + hpFieldName + ", хардпоинтов = " + hps.Length + ".");
-      bool any = false;
-      foreach (var hp in hps) {
-        if (hp == null) continue;
-        if (InjectIntoHardpoint(hp, mountClone)) any = true;
-      }
-      return any;
-    }
-
-    static bool InjectIntoHardpoint(object hp, object mountClone) {
-      Type ht = hp.GetType();
-      // find our array (pylonOptions)
-      Array opts = null; string optName = null;
-      foreach (var name in OptArrayFieldNames) {
-        var a = Refl.FieldOrProp(hp, name) as Array;
-        if (a != null) { opts = a; optName = name; break; }
-      }
-      if (opts == null) { Warn("Hardpoint " + ht.Name + ": массив pylonOptions не найден (" + string.Join("/", OptArrayFieldNames) + "). Мини-дамп:"); Refl.DumpMembers(ht); return false; }
-      if (opts.Length == 0) { Warn("Hardpoint " + ht.Name + "." + optName + " пуст — клонировать структуру не из чего, пропускаю."); return false; }
-      // find mount field on the hardpoint itself and on the option element
-      FieldInfo hpMountF = null;
-      foreach (var name in MountFieldNames) { var f = Refl.Field(ht, name); if (f != null && f.FieldType.IsInstanceOfType(mountClone)) { hpMountF = f; break; } }
-      object templateOpt = opts.GetValue(opts.Length - 1);
-      Type ot = templateOpt.GetType();
-      FieldInfo optMountF = null;
-      foreach (var name in MountFieldNames) { var f = Refl.Field(ot, name); if (f != null && f.FieldType.IsInstanceOfType(mountClone)) { optMountF = f; break; } }
-      if (optMountF == null) { Warn("Элемент " + ot.Name + ": поле mount нужного типа нет. Мини-дамп:"); Refl.DumpMembers(ot); return false; }
-      // clone the option structure (class -> Instantiate for Unity objects / shallow copy otherwise; struct -> box-copy)
-      object newOpt = CloneOption(templateOpt, mountClone, optMountF);
-      if (newOpt == null) return false;
-      // grow the array (add-only)
-      var newArr = Array.CreateInstance(ot, opts.Length + 1);
-      for (int i = 0; i < opts.Length; i++) newArr.SetValue(opts.GetValue(i), i);
-      newArr.SetValue(newOpt, opts.Length);
-      if (!Refl.SetDeep(hp, optName, newArr)) { Warn("Не смог записать расширенный массив " + ht.Name + "." + optName + "."); return false; }
-      // also point the hardpoint's own default mount at ours if such a field exists (optional, best-effort)
-      if (hpMountF != null) { try { hpMountF.SetValue(hp, mountClone); Info("Hardpoint." + hpMountF.Name + " переключён на наш WeaponMount."); } catch { } }
-      Info("Добавлена опция хардпоинта: " + ht.Name + "." + optName + "[" + opts.Length + "] -> mount=" + Plugin.UniqueId);
-      return true;
-    }
-
-    static object CloneOption(object templateOpt, object mountClone, FieldInfo optMountF) {
-      Type ot = templateOpt.GetType();
-      object copy;
-      if (ot.IsValueType) {
-        copy = Activator.CreateInstance(ot); // boxed struct copy below via field-by-field
-        foreach (var f in ot.GetFields(Refl.All)) {
-          if (f.IsStatic || f.IsLiteral) continue;
-          try { f.SetValue(copy, f.GetValue(templateOpt)); } catch { }
+    /// <summary>info.weaponName of a WeaponMount via reflection (field or property chain).</summary>
+    static string GetWeaponName(object mount) {
+      if (mount == null) return null;
+      try {
+        object info = Refl.FieldOrProp(mount, "info");
+        if (info != null) {
+          var wn = Refl.FieldOrProp(info, "weaponName") as string;
+          if (wn != null) return wn;
         }
-      } else if (templateOpt is UnityEngine.Object) {
-        copy = UnityEngine.Object.Instantiate((UnityEngine.Object)templateOpt);
-      } else {
-        try {
-          copy = Activator.CreateInstance(ot, true);
-          foreach (var f in ot.GetFields(Refl.All)) {
-            if (f.IsStatic || f.IsLiteral) continue;
-            try { f.SetValue(copy, f.GetValue(templateOpt)); } catch { }
-          }
-        } catch (Exception e) { Warn("Клон опции " + ot.Name + " упал: " + e.Message); return null; }
-      }
-      try { optMountF.SetValue(copy, mountClone); } catch (Exception e) { Warn("не смог подставить mount в опцию: " + e.Message); return null; }
-      // rename-ish: set display-name strings to our UI name if present
-      foreach (var f in ot.GetFields(Refl.All))
-        if (f.FieldType == typeof(string) && !f.IsStatic && f.Name.ToLowerInvariant().Contains("name"))
-          { try { f.SetValue(copy, "Zircon HV (1 Mt)"); } catch { } }
-      return copy;
+        var direct = Refl.FieldOrProp(mount, "weaponName") as string;
+        if (direct != null) return direct;
+      } catch { }
+      return null;
     }
+
+    /// <summary>Shallow field-by-field copy of one pylonOptions element (struct or class).</summary>
+    static object ShallowCopyOption(object src, Type optT) {
+      try {
+        object copy = optT.IsValueType ? Activator.CreateInstance(optT) : Activator.CreateInstance(optT, true);
+        foreach (var f in optT.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+          if (f.IsLiteral) continue;
+          try { f.SetValue(copy, f.GetValue(src)); } catch { }
+        }
+        return copy;
+      } catch (Exception e) { Warn("ShallowCopyOption(" + optT.Name + ") упал: " + e.Message); return null; }
+    }
+
 
     // ---------------------------------------------------------------
     // Register + inject (called repeatedly until success) — v3 flow:
     // EncyclopediaLoader.AddWeaponMount/AddUnit first, direct collection
     // add as fallback; hardpoint injection via pylonOptions (add-only).
     // ---------------------------------------------------------------
-    public static bool RegisterAndInject(GameObject clone, object enc) {
+    public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO) {
       bool anyOk = false;
 
       // --- MissileDefinition / WeaponMount clones from the clone's own components ---
@@ -397,9 +401,14 @@ namespace ZirconHV {
         defClone = Refl.CreateLike(defs[0].GetType(), defs[0]);
         if (defClone != null) { Warhead.ApplyToBlastYield(defClone); StampUnique(defClone); }
       }
-      if (mounts.Length > 0) {
-        Info("Клонирую WeaponMount (" + mounts[0].GetType().FullName + ")...");
-        mountClone = Refl.CreateLike(mounts[0].GetType(), mounts[0]);
+      // v6 ПРАВКА 2: шаблон WeaponMount — сначала SO прямо из бандла ( GetType().Name=="WeaponMount" ),
+      // затем компонент клона.
+      UnityEngine.Object mountTemplate = null;
+      if (bundleMountSO != null) { mountTemplate = (UnityEngine.Object)bundleMountSO; Info("Шаблон WeaponMount: SO из бандла (" + mountTemplate.GetType().FullName + ")..."); }
+      else if (mounts.Length > 0) { mountTemplate = mounts[0]; Info("Клонирую WeaponMount (" + mountTemplate.GetType().FullName + ")..."); }
+      else Err("Ни WeaponMount SO в бандле, ни компонента WeaponMount в клоне — инъекция на хардпоинты невозможна.");
+      if (mountTemplate != null) {
+        mountClone = Refl.CreateLike(mountTemplate.GetType(), mountTemplate);
         if (mountClone != null && defClone != null) {
           // link cloned mount -> cloned definition if such a reference field exists
           foreach (var f in mountClone.GetType().GetFields(Refl.All))
@@ -464,23 +473,77 @@ namespace ZirconHV {
       }
     }
 
+    // ---------------------------------------------------------------
+    // v6 ПРАВКА 3: уникальный jsonKey ДО EncyclopediaLoader.AddWeaponMount.
+    // Читаем старый jsonKey (поле/свойство "jsonKey" на WeaponMount SO из бандла или
+    // на компонентах клона), затем переписываем ЕГО ЗНАЧЕНИЕ на "ZirconHV_1Mt" во всех
+    // string-полях/свойствах с именем jsonKey и во всех string-полях, равных старому
+    // ключу. Без этого AddWeaponMount даёт "Duplicate WeaponMount JSON key".
+    // ---------------------------------------------------------------
+    public const string CloneJsonKey = "ZirconHV_1Mt";
+
+    public static void RewriteJsonKey(GameObject clone, object bundleMountSO) {
+      Info("v6 ПРАВКА 3: читаю старый jsonKey клона (поле/свойство \"jsonKey\")...");
+      string oldKey = FindJsonKey(clone, bundleMountSO);
+      Info("Старый jsonKey = \"" + (oldKey ?? "?") + "\". Переписываю на \"" + CloneJsonKey + "\" (jsonKey + все string-поля, равные старому ключу)...");
+      int n = 0;
+      var targets = new List<object>();
+      if (clone != null) targets.AddRange(clone.GetComponentsInChildren<Component>(true));
+      if (bundleMountSO != null) targets.Add(bundleMountSO);
+      foreach (var t0 in targets) {
+        if (t0 == null) continue;
+        Type t = t0.GetType();
+        foreach (var f in t.GetFields(Refl.All)) {
+          if (f.FieldType != typeof(string) || f.IsStatic || f.IsLiteral) continue;
+          string v = null; try { v = (string)f.GetValue(t0); } catch { continue; }
+          if (v == null) continue;
+          bool hit = string.Equals(f.Name, "jsonKey", StringComparison.OrdinalIgnoreCase)
+                  || (oldKey != null && oldKey.Length > 0 && v == oldKey);
+          if (!hit) continue;
+          try { f.SetValue(t0, CloneJsonKey); n++; Info("  " + t.Name + "." + f.Name + ": \"" + v + "\" -> \"" + CloneJsonKey + "\""); }
+          catch (Exception e) { Warn("  не смог переписать " + t.Name + "." + f.Name + ": " + e.Message); }
+        }
+        foreach (var pr in t.GetProperties(Refl.All)) {
+          if (pr.PropertyType != typeof(string) || !pr.CanWrite) continue;
+          try { if (pr.GetIndexParameters().Length != 0) continue; } catch { continue; }
+          string v = null; try { v = (string)pr.GetValue(t0, null); } catch { continue; }
+          if (v == null) continue;
+          bool hit = string.Equals(pr.Name, "jsonKey", StringComparison.OrdinalIgnoreCase)
+                  || (oldKey != null && oldKey.Length > 0 && v == oldKey);
+          if (!hit) continue;
+          try { pr.SetValue(t0, CloneJsonKey, null); n++; Info("  " + t.Name + "." + pr.Name + " (prop): \"" + v + "\" -> \"" + CloneJsonKey + "\""); } catch { }
+        }
+      }
+      LastJsonKey = CloneJsonKey;   // v6 ПРАВКА 3: для fail-summary и лога успеха
+      if (n == 0) Warn("Ни одного поля jsonKey/старого ключа не найдено — AddWeaponMount может дать Duplicate key. Логирую как есть.");
+      else Info("Готово: переписано полей = " + n + ", jsonKey клона = \"" + CloneJsonKey + "\".");
+    }
+
+    static string FindJsonKey(GameObject clone, object bundleMountSO) {
+      var probes = new List<object>();
+      if (bundleMountSO != null) probes.Add(bundleMountSO);
+      if (clone != null) probes.AddRange(clone.GetComponentsInChildren<Component>(true));
+      foreach (var o in probes) {
+        if (o == null) continue;
+        var v = Refl.FieldOrProp(o, "jsonKey") as string;
+        if (!string.IsNullOrEmpty(v)) return v;
+      }
+      return null;
+    }
+
+
     // ---------------- helpers ----------------
 
     /// <summary>
-    /// v5 p.3: Encyclopedia instance lookup for the Runner stage (c).
-    /// PRIMARY = Harmony-postfix static (EncyclopediaPatches.LastInstance, secondary source),
-    /// then Resources.FindObjectsOfTypeAll via MakeGenericMethod (first non-null),
-    /// then static Instance/instance/Current, then Object.FindObjectsOfType.
+    /// v6 ПРАВКА 1: поиск Encyclopedia БЕЗ Harmony-postfix (postfix убран из потока).
+    /// Только поллинг Resources.FindObjectsOfTypeAll (используется Ops-fallback путём;
+    /// основной стадией (c) поллит прямо Plugin.Tick()).
     /// </summary>
-    public static object FindEncyclopedia(Type encType) {
+    /// </summary>
+public static object FindEncyclopedia(Type encType) {
       if (encType == null) return null;
-      object byPostfix = EncyclopediaPatches.LastInstance;
-      if (byPostfix != null && encType.IsInstanceOfType(byPostfix)) {
-        Info("Encyclopedia получен из Harmony-postfix (Encyclopedia::AfterLoad): \"" + ((UnityEngine.Object)byPostfix).name + "\".");
-        return byPostfix;
-      }
       var found = FindSceneInstance(encType);
-      if (found != null) Info("Encyclopedia получен поллингом (Resources.FindObjectsOfTypeAll/статика).");
+      if (found != null) Info("Encyclopedia получен поллингом (Resources.FindObjectsOfTypeAll).");
       return found;
     }
 

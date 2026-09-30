@@ -52,9 +52,14 @@ namespace ZirconHV {
 
     public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO, object bundleDefSO) {
       if (bundleMountSO == null || bundleDefSO == null) return false;
+      // v1.0.1: запоминаем ДОНОРСКИЙ jsonKey/имя исходного WeaponMount до перебивания клону.
+      DonorJsonKey = Refl.FieldOrProp(bundleMountSO, "jsonKey") as string;
+      DonorWeaponName = GetWeaponName(bundleMountSO);
+      Info("Донорский WeaponMount: jsonKey=\"" + DonorJsonKey + "\", weaponName=\"" + DonorWeaponName + "\"");
       object mountClone = Refl.CreateLike(bundleMountSO.GetType(), bundleMountSO);
       object defClone   = Refl.CreateLike(bundleDefSO.GetType(), bundleDefSO);
       if (mountClone == null || defClone == null) return false;
+      clonedLocal = true; mountCloneRef = mountClone; // v1.0.1: для повторного инжекта после AfterLoad
       
       Refl.SetDeep(mountClone, "jsonKey", CloneJsonKey);
       Refl.SetDeep(defClone, "jsonKey", CloneJsonKey);
@@ -85,11 +90,35 @@ namespace ZirconHV {
           }
         }
       }
-      bool injOk = InjectHardpointsV3(mountClone);
-      anyOk |= injOk;
+      bool injOk = InjectHardpointsV3(mountClone) > 0;
+      // v1.0.1: инжект мог провалиться из-за тайминга — Hardpoint'ы борта создаются позже.
+      // Plugin.Update продолжит вызывать ReinjectHardpoints каждые 5 сек (см. reinjectPending).
+      if (injOk || anyOk) { injectedAtLeastOnce = true; }
       if (anyOk && injOk) LastJsonKey = CloneJsonKey;
       return anyOk && injOk;
     }
+
+    // v1.0.1: донорский jsonKey исходного WeaponMount SO из бандла Multi-Missile
+    // (например "zircon_3m22"). Находится в RegisterAndInject до перебивания клону jsonKey.
+    public static string DonorJsonKey;
+    public static string DonorWeaponName;
+    public static bool injectedAtLeastOnce;
+
+    /// <summary>
+    /// v1.0.1: повторный инжект пилон-опций (вызывается из Plugin после Encyclopedia.AfterLoad).
+    /// Нужен, потому что в момент первой попытки Hardpoint'ы борта ещё не созданы
+    /// (FindObjectsOfTypeAll возвращает пустой список) — инъекция молча пропускалась.
+    /// </summary>
+    public static void ReinjectHardpoints(GameObject clone, object bundleMountSO) {
+      if (!clonedLocal || clone == null || mountCloneRef == null) return;
+      if (bundleMountSO != null && string.IsNullOrEmpty(DonorJsonKey))
+        DonorJsonKey = Refl.FieldOrProp(bundleMountSO, "jsonKey") as string;
+      int n = InjectHardpointsV3(mountCloneRef);
+      if (n > 0) { LastJsonKey = CloneJsonKey; Info("Reinject успешен: добавлено пилонов: " + n); }
+    }
+
+    static bool clonedLocal;
+    static object mountCloneRef;
 
     static bool RegisterViaOps(GameObject clone, object enc, object defClone, object mountClone) {
       Type loaderT = Refl.FindType("Blueprinter.Ops.EncyclopediaLoader") ?? Refl.FindTypeInCSharp("EncyclopediaLoader");
@@ -116,39 +145,92 @@ namespace ZirconHV {
       try { m.Invoke(m.IsStatic ? null : target, args); return true; } catch { return false; }
     }
 
-    static bool InjectHardpointsV3(object mountClone) {
-      if (mountClone == null) return false;
-      Type hpT = Refl.FindTypeInCSharp("Hardpoint"); if (hpT == null) return false;
+    // v1.0.1: полный переписанный инжект пилонов.
+    // СТАРЫЕ БАГИ, которые чиним:
+    //  1) сопоставление шло по weaponName (у WeaponMount его может не быть -> null -> ни один
+    //     Hardpoint не матчился);
+    //  2) matcился ТЕКУЩИЙ mount пилона — после смены опции в UI это уже клон/другое оружие;
+    //     нужно матчить ВСЮ pylonOptions (любое звено с донорским jsonKey);
+    //  3) return injDone = true возвращался даже при нулевых изменениях, маскируя провал;
+    //  4) renderer новой опции обнулялся — модель на пилоне не отображается.
+    static int InjectHardpointsV3(object mountClone) {
+      if (mountClone == null) return -1;
+      Type hpT = Refl.FindTypeInCSharp("Hardpoint"); if (hpT == null) return -1;
       FieldInfo mountF = hpT.GetField("mount", Refl.All);
       FieldInfo optsF  = hpT.GetField("pylonOptions", Refl.All);
-      if (mountF == null || optsF == null) return false;
-      Type optT = optsF.FieldType.IsArray ? optsF.FieldType.GetElementType() : null; if (optT == null) return false;
+      if (mountF == null || optsF == null) { Err("Hardpoint.mount/pylonOptions не найдены."); Refl.DumpMembers(hpT); return -1; }
+      Type optT = optsF.FieldType.IsArray ? optsF.FieldType.GetElementType() : null; if (optT == null) return -1;
       FieldInfo optMountF  = optT.GetField("mount", Refl.All);
       FieldInfo optRenderF = optT.GetField("renderer", Refl.All);
-      if (optMountF == null || optRenderF == null) return false;
-      UnityEngine.Object[] hps = null; try { hps = UnityEngine.Resources.FindObjectsOfTypeAll(hpT); } catch { return false; }
+      if (optMountF == null) return -1;
+
+      string donorKey = DonorJsonKey;
+      Info("Инжект пилон-опций: ищу Hardpoint'ы, у которых в pylonOptions есть mount с jsonKey=\"" + donorKey + "\"...");
+
+      UnityEngine.Object[] hps = null; try { hps = UnityEngine.Resources.FindObjectsOfTypeAll(hpT); } catch { return -1; }
+      int patched = 0, scanned = 0;
       foreach (var o in hps) {
         if (o == null) continue;
         try {
-          object hp = o; object curMount = mountF.GetValue(hp); if (curMount == null) continue;
-          string wn = GetWeaponName(curMount); if (wn == null || wn.IndexOf("Zircon", StringComparison.OrdinalIgnoreCase) < 0) continue;
+          object hp = o;
           Array opts = optsF.GetValue(hp) as Array; if (opts == null || opts.Length == 0) continue;
-          bool already = false;
+          scanned++;
+          // ищем ЛЮБУЮ опцию этого пилона, чей mount — донорский Циркон (по jsonKey, фолбэк по имени)
+          bool donorHere = false;
+          object lastDonorOpt = null;
           for (int q = 0; q < opts.Length; q++) {
-            if (ReferenceEquals(optMountF.GetValue(opts.GetValue(q)), mountClone)) { already = true; break; }
+            object om = optMountF.GetValue(opts.GetValue(q));
+            if (om == null) continue;
+            if (ReferenceEquals(om, mountClone)) { donorHere = true; break; } // уже инжектировали
+            if (MatchesDonor(om, donorKey)) { donorHere = true; lastDonorOpt = opts.GetValue(q); }
           }
-          if (already) continue;
-          object copy = ShallowCopyOption(opts.GetValue(opts.Length - 1), optT); if (copy == null) continue;
-          optMountF.SetValue(copy, mountClone); optRenderF.SetValue(copy, null);
+          if (!donorHere || lastDonorOpt == null) continue;
+
+          object copy = ShallowCopyOption(lastDonorOpt, optT); if (copy == null) continue;
+          optMountF.SetValue(copy, mountClone);
+          if (optRenderF != null) {
+            // НЕ обнуляем renderer: берём из текущей смонтированной модели пилона,
+            // иначе превью/модель оружия на пилоне не отрисуется.
+            object cur = mountF.GetValue(hp);
+            if (cur == null) {
+              for (int q = 0; q < opts.Length; q++) {
+                var r = optRenderF.GetValue(opts.GetValue(q)) as UnityEngine.Object;
+                if (r != null) { optRenderF.SetValue(copy, r); break; }
+              }
+            } else {
+              var rm = Refl.FieldOrProp(cur, "model") as UnityEngine.Component;
+              var rr = rm != null ? rm.GetComponent<Renderer>() : null;
+              if (rr != null) optRenderF.SetValue(copy, rr);
+            }
+          }
           var newArr = Array.CreateInstance(optT, opts.Length + 1);
           for (int q = 0; q < opts.Length; q++) newArr.SetValue(opts.GetValue(q), q);
           newArr.SetValue(copy, opts.Length); optsF.SetValue(hp, newArr);
-        } catch { }
+          patched++;
+        } catch (Exception e) { Warn("Hardpoint пропущен из-за исключения: " + e.Message); }
       }
-      return injDone = true;
+      injDone = patched > 0;
+      Info("Проверено Hardpoint'ов с опциями: " + scanned + ", добавлено звено с клоном: " + patched + ".");
+      if (patched == 0)
+        Err("НИ ОДИН Hardpoint не содержит донорский Циркон (jsonKey=\"" + donorKey + "\"). " +
+            "Проверь: включён ли Multi-Missile, загружены ли его бандлы до этой попытки.");
+      return patched;
     }
 
-    static bool injDone;
+    static bool MatchesDonor(object mount, string donorKey) {
+      if (string.IsNullOrEmpty(donorKey)) return false;
+      var k = Refl.FieldOrProp(mount, "jsonKey") as string;
+      if (!string.IsNullOrEmpty(k) && string.Equals(k, donorKey, StringComparison.OrdinalIgnoreCase)) return true;
+      // фолбэк: имя префаба/weaponName содержит "zircon"
+      try {
+        var go = Refl.FieldOrProp(mount, "unitPrefab") as GameObject ?? Refl.FieldOrProp(mount, "prefab") as GameObject;
+        if (go != null && go.name.IndexOf("zircon", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+      } catch { }
+      var wn = GetWeaponName(mount);
+      return wn != null && wn.IndexOf("Zircon", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    public static bool injDone;
 
     static string GetWeaponName(object mount) {
       if (mount == null) return null;

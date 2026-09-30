@@ -11,7 +11,7 @@ namespace ZirconHV {
   [BepInPlugin(GUID, NAME, VERSION)]
   [BepInDependency("com.kingwixly.multimissile", BepInDependency.DependencyFlags.SoftDependency)]
   public partial class Plugin : BaseUnityPlugin {
-    public const string GUID="com.godfather2365.zirconhv", NAME="Zircon Heavy Variant", VERSION="1.0.0";
+    public const string GUID="com.godfather2365.zirconhv", NAME="Zircon Heavy Variant", VERSION="1.0.1";
     public const string UniqueId = "Zircon_HV_GODFather";
     internal static ConfigEntry<float> YieldKt; internal static ConfigEntry<string> PrefabPath;
     internal static ConfigEntry<bool> EnableTwinFallback, OverrideOriginal, DumpApi;
@@ -27,6 +27,7 @@ namespace ZirconHV {
       DumpApi = Config.Bind("Debug","DumpBlueprinterApi",false,"true -> dump all Blueprinter-ish types/members to LogOutput.log (run once on live game, then report member names back to the author).");
       if (DumpApi.Value) DumpBlueprinterApi();
 
+      EncyclopediaPatches.Apply(); // v1.0.1: раньше Apply() не вызывался нигде — Harmony-патч был мёртвым
       InitLoop();
       Log.LogInfo(NAME+" "+VERSION+" loaded. YieldKt="+YieldKt.Value);
     }
@@ -44,6 +45,8 @@ namespace ZirconHV {
     float nextAt;                           
     float lastHeartbeat;
     string stage = "a) поиск бандла";
+    bool reinjectPending;   // v1.0.1: повторный инжект пилонов после регистрации
+    float reinjectNextAt;
 
     AssetBundle mmBundle;
     GameObject prefab;
@@ -61,6 +64,17 @@ namespace ZirconHV {
     }
 
     void Update() {
+      // v1.0.1: после успешной регистрации НЕ останавливаемся — раз в 5 сек перепроходим
+      // инжект пилонов, пока Hardpoint'ы борта реально не появятся в сцене (Encyclopedia.AfterLoad).
+      if (done && reinjectPending) {
+        float n = Time.realtimeSinceStartup;
+        if (n >= reinjectNextAt) {
+          reinjectNextAt = n + 5f;
+          try { Registration.ReinjectHardpoints(clone, bundleMountSO); } catch (Exception e) { Log.LogWarning("Reinject: " + e.Message); }
+          if (Registration.injDone) reinjectPending = false;
+        }
+        return;
+      }
       if (done) return;
       float now = Time.realtimeSinceStartup;
       if (now < nextAt) return;
@@ -134,6 +148,12 @@ namespace ZirconHV {
       stage = "e/f) регистрация + инжект";
       bool ok = Registration.RegisterAndInject(clone, enc, bundleMountSO, bundleDefSO);
       if (ok) { done = true; stage = "завершено"; }
+      else if (Registration.injectedAtLeastOnce) {
+        // v1.0.1: оружие зарегистрировано, но пилоны ещё неpatched (Hardpoint'ы не созданы).
+        // Считаем регистрацию успешной и продолжаем перепробовать инжект в Update().
+        done = true; reinjectPending = !Registration.injDone;
+        stage = reinjectPending ? "регистрация ок, ждём Hardpoint'ы" : "завершено";
+      }
     }
   }
 }

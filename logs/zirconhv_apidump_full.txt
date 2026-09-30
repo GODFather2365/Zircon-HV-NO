@@ -1,0 +1,844 @@
+========== FULL API DUMP ==========
+Game version: 0.34.1
+Unity version: 2022.3.62f2
+
+
+===== ASSEMBLY: Assembly-CSharp (WEAPON TYPES) =====
+
+== Assembly-CSharp :: WeaponMount
+   BASE: UnityEngine.ScriptableObject
+   F Nullable`1 <INetworkDefinition.LookupIndex>k__BackingField [priv]
+   F GameObject prefab [pub]
+   F String jsonKey [pub]
+   F WeaponInfo info [pub]
+   F String mountName [pub]
+   F Int32 ammo [pub]
+   F Boolean turret [pub]
+   F Boolean missileBay [pub]
+   F Boolean radar [pub]
+   F Boolean tailHook [pub]
+   F Boolean slingloadHook [pub]
+   F Boolean countermeasure [pub]
+   F Boolean colorable [pub]
+   F Boolean Cargo [pub]
+   F Boolean Troops [pub]
+   F Boolean sortWeapons [pub]
+   F Boolean GearSafety [pub]
+   F Boolean GroundSafety [pub]
+   F Boolean GunAmmo [pub]
+   F Single emptyCost [pub]
+   F Single emptyMass [pub]
+   F Single mass [pub]
+   F Single drag [pub]
+   F Single emptyDrag [pub]
+   F Single RCS [pub]
+   F Single emptyRCS [pub]
+   F Boolean disabled [priv]
+   F Boolean isEventContent [priv]
+   F Boolean dontAutomaticallyAddToEncyclopedia [pub]
+   P Nullable`1 INetworkDefinition.LookupIndex
+   P String IHasJsonKey.JsonKey
+   M Nullable`1 INetworkDefinition.get_LookupIndex()
+   M Void INetworkDefinition.set_LookupIndex(Nullable`1 value)
+   M String IHasJsonKey.get_JsonKey()
+   M Void IHasJsonKey.set_JsonKey(String value)
+   M Boolean NotAllowed(Boolean includeEventContent)
+   M Boolean IsAllowed(Boolean includeEventContent)
+   M Void Initialize()
+   M Single GetDragPerRound()
+   M Single GetRCSPerRound()
+
+== Assembly-CSharp :: MissileDefinition
+   BASE: UnitDefinition
+   F Nullable`1 mass [priv]
+   M Single GetMass()
+
+== Assembly-CSharp :: WeaponInfo
+   BASE: UnityEngine.ScriptableObject
+   F GameObject weaponPrefab [pub]
+   F RoleIdentity effectiveness [pub]
+   F TargetRequirements targetRequirements [pub]
+   F Single pK [pub]
+   F String weaponName [pub]
+   F String shortName [pub]
+   F String description [pub]
+   F Single fireInterval [pub]
+   F Single muzzleVelocity [pub]
+   F Single maxSpeed [pub]
+   F Single dragCoef [pub]
+   F Single gravMult [pub]
+   F Single pierceDamage [pub]
+   F Single blastDamage [pub]
+   F Sprite weaponIcon [pub]
+   F Single armorTierEffectiveness [pub]
+   F Single airburstHeight [pub]
+   F Single visibilityWhenFired [pub]
+   F Single costPerRound [pub]
+   F Single massPerRound [pub]
+   F Boolean useWeaponDoors [pub]
+   F Boolean boresight [pub]
+   F Boolean laserGuided [pub]
+   F Boolean missile [pub]
+   F Boolean bomb [pub]
+   F Boolean glideBomb [pub]
+   F Boolean gun [pub]
+   F Boolean overHorizon [pub]
+   F Boolean nuclear [pub]
+   F Boolean strategic [pub]
+   F Boolean energy [pub]
+   F Boolean jammer [pub]
+   F Boolean troops [pub]
+   F Boolean hideInDisplay [pub]
+   F Boolean cargo [pub]
+   F Boolean rearmGround [pub]
+   F Boolean rearmShip [pub]
+   F Boolean sling [pub]
+   M Void SetMassPerRound(Single massPerRound)
+   M Void SetCostPerRound(Single costPerRound)
+   M Single GetMaxSpeed()
+   M Single CalcAttacksNeeded(Unit target)
+
+== Assembly-CSharp :: Encyclopedia
+   BASE: UnityEngine.ScriptableObject
+   F ResourcesAsyncLoader`1 loader [priv]
+   F List`1 aircraft [pub]
+   F List`1 vehicleTypes [pub]
+   F List`1 vehicles [pub]
+   F List`1 missiles [pub]
+   F List`1 buildingTypes [pub]
+   F List`1 buildings [pub]
+   F List`1 shipTypes [pub]
+   F List`1 ships [pub]
+   F List`1 scenery [pub]
+   F List`1 otherUnits [pub]
+   F List`1 weaponMounts [pub]
+   F List`1 factions [pub]
+   F Dictionary`2 Lookup [pub]
+   F Dictionary`2 WeaponLookup [pub]
+   F Dictionary`2 massLookup [priv]
+   F List`1 IndexLookup [pub]
+   F List`1 aircraftAndVehiclesCache [priv]
+   P Encyclopedia i
+   M Encyclopedia get_i()
+   M UniTask Preload(CancellationToken cancel)
+   M Void AfterLoad(Encyclopedia instance)
+   M Void SortByValue()
+   M Void AfterLoad()
+   M Boolean TryGetPrefab(String key, GameObject& prefab)
+   M IReadOnlyList`1 GetAircraftAndVehicles()
+   M Void OnValidate()
+   M Void LogAllAircraftNames()
+   M Void <AfterLoad>g__AddList|7_0(Dictionary`2 lookup, List`1 items)
+   M Void <AfterLoad>g__AddWithIndex|7_1(List`1 lookup, List`1 items)
+   M Void <OnValidate>g__Validate|27_0(List`1 assets, <>c__DisplayClass27_0& )
+
+== Assembly-CSharp :: Hardpoint
+   BASE: System.Object
+   F Transform transform [pub]
+   F UnitPart part [pub]
+   F BayDoor[] bayDoors [pub]
+   F Single doorOpenDuration [pub]
+   F WeaponMount mount [priv]
+   F HardpointPylon[] pylonOptions [priv]
+   F Renderer Pylon [pub]
+   F Renderer Plug [pub]
+   F Weapon[] BuiltInWeapons [pub]
+   F Turret[] BuiltInTurrets [pub]
+   F Int32 HardpointIndex [pub]
+   F GameObject spawnedPrefab [priv]
+   M GameObject SpawnMount(Aircraft aircraft, WeaponMount weaponMount)
+   M Void SpringOpenBayDoors()
+   M Void ModifyMass(Single change)
+   M BayDoor GetCargoDoor()
+   M WeaponMount GetMount()
+   M Void ModifyDrag(Single change)
+   M Void ModifyRCS(Single change)
+   M Void RemoveMount()
+   M Void ShowPylon(Boolean weaponLoaded)
+
+== Assembly-CSharp :: HardpointSet
+   BASE: System.Object
+   F String name [pub]
+   F List`1 precludingHardpointSets [pub]
+   F Boolean SymmetryWithPrev [pub]
+   F String SymmetryName [pub]
+   F List`1 weaponOptions [pub]
+   F WeaponMount weaponMount [pub]
+   F List`1 hardpoints [pub]
+   M Void SpawnMounts(Aircraft aircraft, WeaponMount weaponMount)
+   M Void RemoveMounts()
+   M Boolean BlockedByOtherHardpoint(Loadout loadout)
+
+== Assembly-CSharp :: Aircraft
+   BASE: Unit
+   IMPL: NuclearOption.MissionEditorScripts.IEditorSelectable
+   F ProfilerMarker localSimFixedUpdateMarker [priv]
+   F PlayerRef playerRef [pub]
+   F Loadout loadout [pub]
+   F NetworkBehaviorSyncvar spawningHangar [pub]
+   F Vector3 startingVelocity [pub]
+   F LiveryKey LiveryKey [priv]
+   F Single sortieScore [pub]
+   F Boolean countermeasureTrigger [pub]
+   F Single fuelLevel [pub]
+   F Boolean Ignition [pub]
+   F Boolean gearDeployed [pub]
+   F TargetDetector EOTS [pub]
+   F Pilot[] pilots [pub]
+   F Boolean hasRequestedRearm [priv]
+   F TargetCam targetCam [pub]
+   F WeaponManager weaponManager [pub]
+   F CountermeasureManager countermeasureManager [pub]
+   F AudioClip scrapeSound [pub]
+   F UnitPart cockpit [pub]
+   F ControlsFilter controlsFilter [priv]
+   F RelaxedStabilityController relaxedStabilityController [priv]
+   F Boolean flightAssist [pub]
+   F TargetDetector defaultRadar [priv]
+   F PowerSupply powerSupply [priv]
+   F Canopy[] canopies [priv]
+   F Renderer[] cockpitRenderers [priv]
+   F Renderer[] exteriorRenderers [priv]
+   F ParticleSystem sparksEmitter [priv]
+   F GameObject[] groundEquipment [priv]
+   F Autopilot autopilot [pub]
+   F GearState gearState [pub]
+   F Vector3 accel [pub]
+   F Vector3 velocityPrev [pub]
+   F Vector3 windVelocity [priv]
+   F Single gForce [pub]
+   F Boolean simplePhysics [pub]
+   F Single skill [pub]
+   F Single bravery [pub]
+   F StatusDisplay statusDisplay [priv]
+   F ControlInputs controlInputs [priv]
+   F List`1 knownRadarSources [priv]
+   F List`1 targetDetectors [priv]
+   F List`1 engineStates [pub]
+   F List`1 engines [pub]
+   F List`1 fuelTanks [priv]
+   F MissileWarning missileWarning [priv]
+   F LaserDesignator laserDesignator [priv]
+   F Boolean needsFuel [priv]
+   F Boolean ejected [priv]
+   F Boolean airborne [priv]
+   F Single ecmIntensity [priv]
+   F Single fuelCapacity [priv]
+   F List`1 partsWithAero [priv]
+   F PartDamageTracker partDamageTracker [pub]
+   F EmitParams emitParams [priv]
+   F AudioSource scrapeSource [priv]
+   F Vector3 smoothingVel [priv]
+   F Vector3 rotationSmoothingVel [priv]
+   F Boolean spawnedInPosition [priv]
+   F PartChecker partChecker [priv]
+   F LiveryBehaviour liveryBehaviour [priv]
+   F GameObject CoMDebug [priv]
+   F DebugControlInputsDisplay debugControlInputsDisplay [priv]
+   F List`1 controlSurfaces [priv]
+   F Unit slungUnit [priv]
+   F Boolean initializedLocalSim [priv]
+   F Action onLoadoutChanged [priv]
+   F Action onSpawnedInPosition [priv]
+   F Action onEject [priv]
+   F Action OnTouchdown [priv]
+   F Action`1 onSortieSuccessful [priv]
+   F Action`1 onSetGear [priv]
+   F Action`1 onSetFlightAssist [priv]
+   F Action`1 onShake [priv]
+   F Action`1 onRadarWarning [priv]
+   F NavLights navLights [priv]
+   F Int32 inputIntervalCounter [priv]
+   F Int32 SYNC_VAR_COUNT [priv]
+   F Int32 RPC_COUNT [priv]
+   P Player Player
+   P AircraftDefinition definition
+   P PlayerRef NetworkplayerRef
+   P Loadout Networkloadout
+   P Hangar NetworkspawningHangar
+   P Vector3 NetworkstartingVelocity
+   P LiveryKey NetworkLiveryKey
+   P Single NetworksortieScore
+   P Boolean NetworkcountermeasureTrigger
+   P Single NetworkfuelLevel
+   P Boolean NetworkIgnition
+   P Boolean NetworkgearDeployed
+   M Player get_Player()
+   M AircraftDefinition get_definition()
+   M Void add_onLoadoutChanged(Action value)
+   M Void remove_onLoadoutChanged(Action value)
+   M Void add_onSpawnedInPosition(Action value)
+   M Void remove_onSpawnedInPosition(Action value)
+   M Void add_onEject(Action value)
+   M Void remove_onEject(Action value)
+   M Void add_OnTouchdown(Action value)
+   M Void remove_OnTouchdown(Action value)
+   M Void add_onSortieSuccessful(Action`1 value)
+   M Void remove_onSortieSuccessful(Action`1 value)
+   M Void add_onSetGear(Action`1 value)
+   M Void remove_onSetGear(Action`1 value)
+   M Void add_onSetFlightAssist(Action`1 value)
+   M Void remove_onSetFlightAssist(Action`1 value)
+   M Void add_onShake(Action`1 value)
+   M Void remove_onShake(Action`1 value)
+   M Void add_onRadarWarning(Action`1 value)
+   M Void remove_onRadarWarning(Action`1 value)
+   M Boolean KnownRadarWarning(Unit radarSource)
+   M MissileWarning GetMissileWarningSystem()
+   M Boolean TryGetLiveryBehaviour(LiveryBehaviour& liveryBehaviour)
+   M Void SetLaserDesignator(LaserDesignator laserDesignator)
+   M LaserDesignator GetLaserDesignator()
+   M Void LockedByMissile(Missile missile)
+   M Void RpcGetRadarWarning(Unit emitter)
+   M Single GetRadarReturn(Vector3 source, Radar radar, Unit emitter, Single dist, Single clutter, RadarParams radarParams, Boolean triggerWarning)
+   M Boolean EstimateDetection(Radar radar, Single& returnSignal)
+   M Void CmdToggleRadar()
+   M Void RpcToggleRadar(Boolean activated)
+   M Void CmdToggleIgnition()
+   M Single GetECMIntensity()
+   M Void CheckNeedsFuel(Single fuelRatio)
+   M Void CmdSetCanRefuel()
+   M Void SetSlingLoadAttachment(Unit slingLoadUnit, DeployState state)
+   M Void CmdSlingLoadAttachment(Unit slingLoadUnit, DeployState state)
+   M Void RpcSlingLoadAttachment(Unit slingLoadUnit, DeployState state)
+   M Void ApplySlingLoadAttachment(Unit slingLoadUnit, DeployState state)
+   M Void CmdSendSlungTransform(Vector3 position, Quaternion rotation)
+   M Boolean CanRefuel()
+   M Void RegisterFuelTank(FuelTank tank)
+   M List`1 GetFuelTanks()
+   M Void RecalcFuelCapacity()
+   M Boolean UseFuel(Single fuelDrawn)
+   M Boolean GetMaxThrust(Single& maxThrust)
+   M Boolean GetMaxPower(Single& maxPower)
+   M Single GetFuelLevel()
+   M Single GetFuelQuantity()
+   M Vector3 GetWindVelocity()
+   M Single GetAirDensity()
+   M Void Refuel(Unit refueler)
+   M Void RpcRefuel(Unit refueler)
+   M Void SetFuelLevel(Unit refueler)
+   M Void AddControlSurface(ControlSurface controlSurface)
+   M Void Awake()
+   M Void OnAuthorityChanged(Boolean hasAuthority)
+   M Void DebugCoM()
+   M Void OnStartServer()
+   M Void OnStartClient()
+   M UniTask SetupUnitName()
+   M Void OwnerNameResolved(PlayerName playerName)
+   M Void SetupLocalPlayerAndUI()
+   M Void SetLocalSim(Boolean localSim)
+   M Void RegisterAeroPart(AeroPart aeroPart)
+   M Void DeregisterAeroPart(AeroPart aeroPart)
+   M Boolean CheckIfLocalSim()
+   M Void SetComplexPhysics()
+   M Void SetSimplePhysics()
+   M Vector3 CalcCenterOfMass()
+   M Void SetLiveryKey(LiveryKey liveryKey, Boolean loadIfUnspawned)
+   M LiveryBehaviour GetLiveryBehaviour()
+   M Void CheckSpawnedInPosition()
+   M Void SpawnedInPosition()
+   M Void SetPreview()
+   M Void SetCockpitRenderers(Boolean enabled)
+   M Void ThrowSparks(Vector3 position, Vector3 extraVelocity)
+   M Void RpcDamage(Byte index, DamageInfo damageInfo)
+   M Void ShakeAircraft(Single lowFreqShake, Single highFreqShake)
+   M Void CmdLaunchMissile(Byte stationIndex, Unit target, GlobalPosition aimpoint)
+   M Void RpcLaunchMissile(Byte stationIndex, Unit target, GlobalPosition aimpoint)
+   M Rigidbody CockpitRB()
+   M AircraftParameters GetAircraftParameters()
+   M Boolean IsLanded()
+   M Void OpenCanopies()
+   M Void ShowGroundEquipment()
+   M ControlInputs GetInputs()
+   M ControlsFilter GetControlsFilter()
+   M PowerSupply GetPowerSupply()
+   M Void FilterInputs()
+   M Void SetFlightAssist(Boolean enabled)
+   M Void SetFlightAssistToDefault()
+   M Boolean IsAutoHoverEnabled()
+   M Void TogglePitchLimiter()
+   M Void ToggleNavLights()
+   M Void SetRadar(Radar radar)
+   M Void Countermeasures(Boolean active, Byte index)
+   M Void CmdCountermeasures(Boolean active, Byte index)
+   M Void RpcCountermeasures(Byte index)
+   M Void SetGear(Boolean deployed)
+   M Void CmdSetGear(Boolean deployed)
+   M Void GearStateChangedHook(Boolean _, Boolean newValue)
+   M Void GearStateChanged(Boolean gearDeployed)
+   M Void SetGear(GearState gearState)
+   M Void ApplySetInputs(CompressedInputs inputs)
+   M Void CheckRadarAlt()
+   M Void FixedUpdate()
+   M Void LocalSimFixedUpdate()
+   M Void CheckPhysicsLod()
+   M Void AddECMIntensity(Single ecmIntensity)
+   M Void SetStationTargets(Byte stationIndex, ReadOnlySpan`1 targetIDs)
+   M Void SetStationTurretTarget(Byte stationIndex, Byte turretIndex, PersistentID targetID)
+   M Void CmdSetStationTurretTarget(Byte stationIndex, Byte turretIndex, PersistentID targetID)
+   M Void RpcSetStationTurretTarget(Byte stationIndex, Byte turretIndex, PersistentID targetID)
+   M Void SetActiveStation(Byte stationIndex)
+   M Void CmdSetActiveStation(Byte stationIndex)
+   M Void RpcSetActiveStation(Byte stationIndex)
+   M Void SetTurretVector(Byte weaponStationIndex, Vector3 direction)
+   M Void CmdSetTurretVector(Byte weaponStationIndex, Vector3Compressed direction)
+   M Void RpcSetTurretVector(Byte weaponStationIndex, Vector3Compressed direction)
+   M Void StartEjectionSequence()
+   M Void CmdStartEjectionSequence()
+   M Void RpcJettisonCanopy()
+   M Void RpcEscapeCapsule()
+   M UniTask EjectionSequence()
+   M Void SpawnEjectingPilot(Int32 pilotNumber)
+   M Void ServerDisableUnit()
+   M Void OnDisable()
+   M Void OnDestroy()
+   M Boolean HasEjected()
+   M Void UnitDisabled(Boolean oldState, Boolean newState)
+   M Void ReturnToInventory()
+   M Void SuccessfulSortie()
+   M UniTask WaitRemoveAircraft(Single delay)
+   M Void MirageProcessed()
+   M PlayerRef get_NetworkplayerRef()
+   M Void set_NetworkplayerRef(PlayerRef value)
+   M Loadout get_Networkloadout()
+   M Void set_Networkloadout(Loadout value)
+   M Hangar get_NetworkspawningHangar()
+   M Void set_NetworkspawningHangar(Hangar value)
+   M Vector3 get_NetworkstartingVelocity()
+   M Void set_NetworkstartingVelocity(Vector3 value)
+   M LiveryKey get_NetworkLiveryKey()
+   M Void set_NetworkLiveryKey(LiveryKey value)
+   M Single get_NetworksortieScore()
+   M Void set_NetworksortieScore(Single value)
+   M Boolean get_NetworkcountermeasureTrigger()
+   M Void set_NetworkcountermeasureTrigger(Boolean value)
+   M Single get_NetworkfuelLevel()
+   M Void set_NetworkfuelLevel(Single value)
+   M Boolean get_NetworkIgnition()
+   M Void set_NetworkIgnition(Boolean value)
+   M Boolean get_NetworkgearDeployed()
+   M Void set_NetworkgearDeployed(Boolean value)
+   M Boolean SerializeSyncVars(NetworkWriter writer, Boolean initialize)
+   M Void DeserializeSyncVars(NetworkReader reader, Boolean initialState)
+   M Void UserCode_RpcGetRadarWarning_-1586111906(Unit emitter)
+   M Void Skeleton_RpcGetRadarWarning_-1586111906(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdToggleRadar_1821461427()
+   M Void Skeleton_CmdToggleRadar_1821461427(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcToggleRadar_1325449311(Boolean activated)
+   M Void Skeleton_RpcToggleRadar_1325449311(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdToggleIgnition_-1067807998()
+   M Void Skeleton_CmdToggleIgnition_-1067807998(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSetCanRefuel_-170919880()
+   M Void Skeleton_CmdSetCanRefuel_-170919880(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSlingLoadAttachment_-82313074(Unit slingLoadUnit, DeployState state)
+   M Void Skeleton_CmdSlingLoadAttachment_-82313074(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcSlingLoadAttachment_-57940477(Unit slingLoadUnit, DeployState state)
+   M Void Skeleton_RpcSlingLoadAttachment_-57940477(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSendSlungTransform_-695501160(Vector3 position, Quaternion rotation)
+   M Void Skeleton_CmdSendSlungTransform_-695501160(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcRefuel_1587114129(Unit refueler)
+   M Void Skeleton_RpcRefuel_1587114129(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcDamage_870168505(Byte index, DamageInfo damageInfo)
+   M Void Skeleton_RpcDamage_870168505(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdLaunchMissile_644415535(Byte stationIndex, Unit target, GlobalPosition aimpoint)
+   M Void Skeleton_CmdLaunchMissile_644415535(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcLaunchMissile_1465828762(Byte stationIndex, Unit target, GlobalPosition aimpoint)
+   M Void Skeleton_RpcLaunchMissile_1465828762(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdCountermeasures_-1391811506(Boolean active, Byte index)
+   M Void Skeleton_CmdCountermeasures_-1391811506(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcCountermeasures_1466036644(Byte index)
+   M Void Skeleton_RpcCountermeasures_1466036644(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSetGear_-1969689879(Boolean deployed)
+   M Void Skeleton_CmdSetGear_-1969689879(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSetStationTurretTarget_-461984136(Byte stationIndex, Byte turretIndex, PersistentID targetID)
+   M Void Skeleton_CmdSetStationTurretTarget_-461984136(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcSetStationTurretTarget_740629667(Byte stationIndex, Byte turretIndex, PersistentID targetID)
+   M Void Skeleton_RpcSetStationTurretTarget_740629667(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSetActiveStation_126720094(Byte stationIndex)
+   M Void Skeleton_CmdSetActiveStation_126720094(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcSetActiveStation_1081017235(Byte stationIndex)
+   M Void Skeleton_RpcSetActiveStation_1081017235(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdSetTurretVector_-1133982608(Byte weaponStationIndex, Vector3Compressed direction)
+   M Void Skeleton_CmdSetTurretVector_-1133982608(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcSetTurretVector_-312569381(Byte weaponStationIndex, Vector3Compressed direction)
+   M Void Skeleton_RpcSetTurretVector_-312569381(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_CmdStartEjectionSequence_1872290971()
+   M Void Skeleton_CmdStartEjectionSequence_1872290971(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcJettisonCanopy_1196305304()
+   M Void Skeleton_RpcJettisonCanopy_1196305304(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcEscapeCapsule_-1155040382()
+   M Void Skeleton_RpcEscapeCapsule_-1155040382(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Int32 GetRpcCount()
+   M Void RegisterRpc(RemoteCallCollection collection)
+
+== Assembly-CSharp :: WeaponManager
+   BASE: UnityEngine.MonoBehaviour
+   F List`1 legalWeaponsCache [priv]
+   F HardpointSet[] hardpointSets [pub]
+   F Dictionary`2 HardpointsIndexes [pub]
+   F Aircraft aircraft [priv]
+   F WeaponStation currentWeaponStation [pub]
+   F List`1 colorables [priv]
+   F List`1 skinnables [priv]
+   F List`1 targetList [priv]
+   F LiveryData liveryData [priv]
+   F MaterialCleanup materialCleanup [priv]
+   F Action OnWeaponsLoaded [priv]
+   F Action OnStationFired [priv]
+   F Boolean gunsLinked [priv]
+   M Void add_OnWeaponsLoaded(Action value)
+   M Void remove_OnWeaponsLoaded(Action value)
+   M Void add_OnStationFired(Action value)
+   M Void remove_OnStationFired(Action value)
+   M Void Awake()
+   M Void OnDestroy()
+   M Void UpdateColorables(LiveryData liveryData)
+   M Loadout SelectAIAircraftWeapons(Airbase parentAirbase)
+   M Loadout GetCurrentLoadout()
+   M Single GetCurrentValue(Boolean includeCargo)
+   M Int32 GetCurrentWarheads()
+   M Single GetCurrentMass()
+   M Void ClearTargetList()
+   M Void AddTargetList(Unit target)
+   M Void RemoveTargetList(Unit target)
+   M List`1 GetTargetList()
+   M Boolean CheckIsTarget(Unit candidate)
+   M Void TargetListChanged()
+   M Void SetTargetList(ReadOnlySpan`1 targetIDs)
+   M Void SetActiveStation(Byte stationIndex)
+   M Void WeaponManager_OnInitialize()
+   M Void WeaponManager_OnLoadoutChanged()
+   M Void InitializeWeaponManager()
+   M Void InvokeOnStationFired()
+   M Void RemoveWeapons()
+   M Void ReturnWeapons()
+   M Void SpawnWeapons()
+   M Void RegisterWeapon(Weapon weapon, WeaponMount weaponMount, Hardpoint hardpoint)
+   M Boolean StationExistsForWeaponInfo(WeaponInfo weaponInfo, Boolean cargo, WeaponStation& existingStation)
+   M Void LoadHardpointSet(HardpointSet hardpointSet, WeaponMount weaponMount)
+   M Void OrganizeWeaponStations()
+   M Void RegisterColorable(Renderer renderer)
+   M Void RegisterSkinnable(Renderer renderer)
+   M Int32 StationsWithTurrets()
+   M Boolean HasTailHook()
+   M Void NextWeaponStation()
+   M Void PreviousWeaponStation()
+   M Void FireGuns()
+   M Void Fire()
+   M UniTask SalvoFire(List`1 targets, Single salvoInterval)
+   M Void ToggleGunsLinked()
+   M Void SetGunsLinked(Boolean gunsLinked)
+   M Boolean HasMultipleGuns()
+
+== Assembly-CSharp :: WeaponStation
+   BASE: System.Object
+   F List`1 Weapons [pub]
+   F List`1 Turrets [pub]
+   F WeaponInfo WeaponInfo [pub]
+   F Byte Number [pub]
+   F Boolean Cargo [pub]
+   F Boolean Reloading [pub]
+   F Boolean WeaponActive [pub]
+   F Boolean SalvoInProgress [pub]
+   F Single LastFiredTime [pub]
+   F Boolean gearSafety [priv]
+   F Boolean groundSafety [priv]
+   F Boolean sortWeapons [priv]
+   F Int32 Ammo [pub]
+   F Int32 FullAmmo [pub]
+   F Int32 weaponIndex [priv]
+   F Dictionary`2 TypeLookup [pub]
+   F Action OnUpdated [priv]
+   M Void add_OnUpdated(Action value)
+   M Void remove_OnUpdated(Action value)
+   M Void SetStationActive(Aircraft aircraft, Boolean isActive)
+   M Void SetTurretVector(Vector3 vector)
+   M Void RegisterWeapon(Weapon weapon, Aircraft aircraft, WeaponMount weaponMount, Hardpoint hardpoint)
+   M Boolean SafetyIsOn(Aircraft aircraft)
+   M Boolean Ready()
+   M Single GetReloadStatusMax()
+   M Single GetReloadStatusMin()
+   M String GetAmmoReadout()
+   M Int32 GetAmmoLoaded()
+   M Int32 GetAmmoTotal()
+   M Byte AssignTurret(Turret turret)
+   M Boolean HasTurret()
+   M Single TurretTraverseRange()
+   M Int32 TurretCount()
+   M Boolean GetFiringConeDirection(Vector3& aimDirection, Single& coneAngle)
+   M Turret GetTurret()
+   M Vector2 GetTurretRelativeAim()
+   M Void Updated()
+   M Void Rearm(Int32 ammoToRearm)
+   M Single GetAmmoLevel()
+   M Void SetStationTargets(ReadOnlySpan`1 targetIDs)
+   M Void SetStationTurretTarget(Byte turretIndex, PersistentID targetID)
+   M Unit GetStationTarget()
+   M Single PrioritizeByPosition(Transform transform, Aircraft aircraft)
+   M Single GenerateCargoPriority(Weapon mount, Aircraft aircraft)
+   M Void SortWeapons(Aircraft aircraft)
+   M Void AssessAmmo()
+   M OpportunityThreat CalcOpportunityThreat(UnitDefinition definition, Unit attachedUnit)
+   M Void RemoteFireAuto(Unit owner)
+   M Void RemoteFireSingle(Unit owner)
+   M Void LaunchMount(Unit owner, Unit target, GlobalPosition aimpoint)
+   M Void Fire(Unit owner, Unit target)
+   M Void AccountAmmo()
+   M Void UpdateLastFired(Int32 roundsFired)
+
+== Assembly-CSharp :: Missile
+   BASE: Unit
+   IMPL: NuclearOption.MissionEditorScripts.IEditorSelectable
+   F PersistentID ownerID [pub]
+   F PersistentID _targetID [priv]
+   F Vector3 startingVelocity [pub]
+   F Vector3 startOffsetFromOwner [pub]
+   F SeekerMode seekerMode [pub]
+   F Unit <owner>k__BackingField [priv]
+   F Unit target [priv]
+   F Motor[] motors [priv]
+   F Single mass [priv]
+   F Single finArea [priv]
+   F Single uprightPreference [priv]
+   F Single supersonicDrag [priv]
+   F AnimationCurve liftCurve [priv]
+   F AnimationCurve dragCurve [priv]
+   F FoldingFin[] foldingFins [priv]
+   F ArmorProperties armorProperties [priv]
+   F Single hitpoints [priv]
+   F Single engineCurrentThrust [priv]
+   F Vector3 localAngularVel [priv]
+   F Int32 motorStage [priv]
+   F Motor motor [priv]
+   F PIDFactors PIDFactors [priv]
+   F Single torque [priv]
+   F Single gLimit [priv]
+   F Single maxTurnRate [priv]
+   F Single onTargetSmoothed [priv]
+   F Vector3 inputs [priv]
+   F PID2D pid [priv]
+   F Transform effectsTransform [priv]
+   F AudioSource flightSound [priv]
+   F AudioClip nearbyDetonationClip [priv]
+   F Single basePitch [priv]
+   F Single pitchRange [priv]
+   F Single maxPitchSpeed [priv]
+   F Warhead warhead [priv]
+   F Single blastYield [priv]
+   F Single pierceDamage [priv]
+   F ProxyFuse proxyFuse [priv]
+   F Boolean impactFuse [priv]
+   F Single impactFuseDelay [priv]
+   F WeaponInfo info [priv]
+   F UnitCommand unitCommand [priv]
+   F Single <timeSinceSpawn>k__BackingField [priv]
+   F Boolean boosterIsAttached [pub]
+   F Single currentFinArea [priv]
+   F Single throttle [priv]
+   F Boolean ignition [priv]
+   F Boolean tangible [priv]
+   F Boolean reachedOnTarget [priv]
+   F MissileSeeker seeker [priv]
+   F GlobalPosition aimPoint [priv]
+   F Vector3 targetVel [priv]
+   F Vector3 torqueAxes [priv]
+   F Action`1 onRadarPing [priv]
+   F Int32 SYNC_VAR_COUNT [priv]
+   F Int32 RPC_COUNT [priv]
+   P PersistentID targetID
+   P Unit owner
+   P Single timeSinceSpawn
+   P UnitCommand UnitCommand
+   P Boolean ICommandable.Disabled
+   P FactionHQ ICommandable.HQ
+   P PersistentID NetworkownerID
+   P PersistentID Network_targetID
+   P Vector3 NetworkstartingVelocity
+   P Vector3 NetworkstartOffsetFromOwner
+   P SeekerMode NetworkseekerMode
+   M PersistentID get_targetID()
+   M Unit get_owner()
+   M Void set_owner(Unit value)
+   M Single get_timeSinceSpawn()
+   M Void set_timeSinceSpawn(Single value)
+   M Void add_onRadarPing(Action`1 value)
+   M Void remove_onRadarPing(Action`1 value)
+   M UnitCommand get_UnitCommand()
+   M Boolean ICommandable.get_Disabled()
+   M FactionHQ ICommandable.get_HQ()
+   M Void Awake()
+   M Void OnEnable()
+   M Boolean IsTangible()
+   M Void SetTangible(Boolean tangible)
+   M WeaponInfo GetWeaponInfo()
+   M Single GetYield()
+   M Single GetPierce()
+   M Single CalcDeltaV()
+   M Single GetTopSpeed(Single launchAltitude, Single targetAltitude)
+   M Single CalcRange(Single launchSpeed, Single launchAltitude, Single targetAltitude, Single targetDist, Single targetRelativeSpeed, Single& noEscapeDistance)
+   M Void OnStartServer()
+   M Void OnStartClient()
+   M Void OnStartNetwork()
+   M Void StartMissile()
+   M Void CheckExclusionZone()
+   M Void LocalStart()
+   M ArmorProperties GetArmorProperties()
+   M Unit GetUnit()
+   M Transform GetTransform()
+   M Void TakeShockwave(Vector3 origin, Single overpressure, Single blastPower)
+   M Single GetMass()
+   M Single GetPrefabMass()
+   M Single GetFinArea()
+   M Single GetTorque()
+   M Single GetMaxTurnRate()
+   M Void SetTorque(Single torque, Single maxTurnRate)
+   M Void SetThrottle(Single throttle)
+   M Void DeployFins()
+   M Void RpcUnfoldFins()
+   M UniTask UnfoldFins()
+   M Single GetDragCoef(Single a)
+   M Single GetTotalBurnTime()
+   M Single GetRemainingBurnTime()
+   M Single GetRemainingDeltaV()
+   M Boolean EngineOn()
+   M Single GetLiftCoeff(Single a)
+   M Single GetThrust()
+   M Single GetThrustDuration()
+   M Single GetMinRange(Single launchSpeed)
+   M String GetSeekerType()
+   M GlobalPosition GetEvasionPoint()
+   M Single GetRadarReturn(Vector3 source, Radar radar, Unit emitter, Single dist, Single clutter, RadarParams radarParameters, Boolean triggerWarning)
+   M Single GetECMIntensity()
+   M Void TakeDamage(Single pierceDamage, Single blastDamage, Single amountAffected, Single fireDamage, Single impactDamage, PersistentID dealerID)
+   M Void Detach(Vector3 velocity, Vector3 relativePos)
+   M Void ApplyDamage(Single pierceDamage, Single blastDamage, Single fireDamage, Single impactDamage)
+   M Void SetTarget(Unit target)
+   M Void SetProxyFuse(Transform targetTransform, Rigidbody targetRB)
+   M Void TargetIDChanged(PersistentID oldValue, PersistentID newValue)
+   M Void UpdateRadarAlt()
+   M Boolean IsArmed()
+   M Void Arm()
+   M Void SetAimpoint(GlobalPosition aimPoint, Vector3 targetVel)
+   M Void Steering()
+   M Void ApplyAero()
+   M Single InterceptPriority(Unit toUnit, Single minRange, Single interceptorValue)
+   M Boolean LosingGround()
+   M Boolean MissedTarget()
+   M Void DetectCollisions()
+   M Boolean PenetrateObject(IDamageable damageable, Vector3 hitPoint, Vector3 hitNormal)
+   M UniTask ImpactDelayedFuse(Vector3 normal, IDamageable penetratedObject, Boolean hitArmor, Boolean hitTerrain)
+   M Void Detonate(Vector3 normal, Boolean hitArmor, Boolean hitTerrain)
+   M UniTask DelayedDestroy(Single delay)
+   M Void UnitDisabled(Boolean oldState, Boolean newState)
+   M Void RpcDetonate(Unit relativeUnit, Boolean useUnit, Vector3 pos, Boolean armed, Boolean hitArmor, Boolean hitTerrain, Vector3 normal)
+   M Void Disappear()
+   M UniTask ExplosionForceOnPhysicsFrame(Transform relativeTransform, Vector3 pos)
+   M Void MotorThrust()
+   M Void FixedUpdate()
+   M Void ServerFixedUpdate()
+   M Void ApplyTerminalBoost(Single value)
+   M Void MirageProcessed()
+   M PersistentID get_NetworkownerID()
+   M Void set_NetworkownerID(PersistentID value)
+   M PersistentID get_Network_targetID()
+   M Void set_Network_targetID(PersistentID value)
+   M Vector3 get_NetworkstartingVelocity()
+   M Void set_NetworkstartingVelocity(Vector3 value)
+   M Vector3 get_NetworkstartOffsetFromOwner()
+   M Void set_NetworkstartOffsetFromOwner(Vector3 value)
+   M SeekerMode get_NetworkseekerMode()
+   M Void set_NetworkseekerMode(SeekerMode value)
+   M Boolean SerializeSyncVars(NetworkWriter writer, Boolean initialize)
+   M Void DeserializeSyncVars(NetworkReader reader, Boolean initialState)
+   M Void UserCode_RpcUnfoldFins_1465559174()
+   M Void Skeleton_RpcUnfoldFins_1465559174(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Void UserCode_RpcDetonate_897349600(Unit relativeUnit, Boolean useUnit, Vector3 pos, Boolean armed, Boolean hitArmor, Boolean hitTerrain, Vector3 normal)
+   M Void Skeleton_RpcDetonate_897349600(NetworkBehaviour behaviour, NetworkReader reader, INetworkPlayer senderConnection, Int32 replyId)
+   M Int32 GetRpcCount()
+   M Void RegisterRpc(RemoteCallCollection collection)
+
+== Assembly-CSharp :: MountedMissile
+   BASE: Weapon
+   F RailDirection railDirection [priv]
+   F Single railLength [priv]
+   F Single railSpeed [priv]
+   F Single railDelay [priv]
+   F AudioClip deploySound [priv]
+   F ParticleSystem deployParticles [priv]
+   F Single deployVolume [priv]
+   F Single doorOpenDuration [priv]
+   F BayDoor[] bayDoors [priv]
+   F Transform rotaryTransform [priv]
+   F Single rotaryDegrees [priv]
+   F Single rotarySpeed [priv]
+   F Single rotaryDelay [priv]
+   F Single railPosition [priv]
+   F Vector3 mountedPosition [priv]
+   F Boolean fired [priv]
+   F Vector3 railVector [priv]
+   M Void AttachToHardpoint(Aircraft aircraft, Hardpoint hardpoint, WeaponMount weaponMount)
+   M Void Fire(Unit owner, Unit target, Vector3 inheritedVelocity, WeaponStation weaponStation, GlobalPosition aimpoint)
+   M UniTask RailLaunch(Unit owner, Unit target)
+   M UniTask RotaryIncrement()
+   M Int32 GetAmmoLoaded()
+   M Int32 GetAmmoTotal()
+   M Void OnDestroy()
+   M Void RemoveFromHardpoint()
+   M Void Rearm(Int32 ammoToRearm, WeaponStation weaponStation)
+   M Void PlayLaunchSound()
+
+== Assembly-CSharp :: INetworkDefinition
+   P Nullable`1 LookupIndex
+   M Nullable`1 get_LookupIndex()
+   M Void set_LookupIndex(Nullable`1 value)
+
+== Assembly-CSharp :: UnitDefinition
+   BASE: UnityEngine.ScriptableObject
+   F Nullable`1 <INetworkDefinition.LookupIndex>k__BackingField [priv]
+   F TypeIdentity typeIdentity [pub]
+   F RoleIdentity roleIdentity [pub]
+   F String jsonKey [pub]
+   F String unitName [pub]
+   F String bogeyName [pub]
+   F String description [pub]
+   F String code [pub]
+   F Single visibleRange [pub]
+   F Single iconRange [pub]
+   F Single radarSize [pub]
+   F Sprite friendlyIcon [pub]
+   F Sprite hostileIcon [pub]
+   F Sprite mapIcon [pub]
+   F Boolean mapOrient [pub]
+   F Boolean IsObstacle [pub]
+   F Single iconSize [pub]
+   F Single mapIconSize [pub]
+   F Int32 captureCapacity [pub]
+   F Single captureStrength [pub]
+   F Single captureDefense [pub]
+   F Single length [pub]
+   F Single width [pub]
+   F Single height [pub]
+   F Single value [pub]
+   F Single mass [pub]
+   F Single manpower [pub]
+   F Single armorTier [pub]
+   F Single damageTolerance [pub]
+   F Boolean CanSlingLoad [pub]
+   F GameObject unitPrefab [pub]
+   F Vector3 spawnOffset [pub]
+   F Boolean disabled [priv]
+   F Boolean isEventContent [priv]
+   F Boolean dontAutomaticallyAddToEncyclopedia [pub]
+   F Single minEditorHeight [pub]
+   F Single maxEditorHeight [pub]
+   P Nullable`1 INetworkDefinition.LookupIndex
+   P String IHasJsonKey.JsonKey
+   M Nullable`1 INetworkDefinition.get_LookupIndex()
+   M Void INetworkDefinition.set_LookupIndex(Nullable`1 value)
+   M String IHasJsonKey.get_JsonKey()
+   M Void IHasJsonKey.set_JsonKey(String value)
+   M Boolean NotAllowed(Boolean includeEventContent)
+   M Boolean IsAllowed(Boolean includeEventContent)
+   M Single GetOpportunity(RoleIdentity role)
+   M Void CacheMass()
+   M Single ThreatPosedBy(RoleIdentity role)

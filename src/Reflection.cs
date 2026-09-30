@@ -245,6 +245,8 @@ namespace ZirconHV {
       public string PrefabName;
       public object MountSO;
       public string MountSOName;
+      public object DefSO;        // v7: MissileDefinition SO из бандла (если есть)
+      public string DefSOName;
     }
 
     static bool IsExactNuke(string n) {
@@ -277,6 +279,8 @@ namespace ZirconHV {
         Info("Ассет \"" + n + "\" -> тип " + tn);
         if (tn == "WeaponMount") {
           if (res.MountSO == null) { res.MountSO = obj; res.MountSOName = n; Info("Это исходный WeaponMount SO: \"" + n + "\""); }
+        } else if (tn == "MissileDefinition") {   // v7: definition SO прямо из бандла
+          if (res.DefSO == null) { res.DefSO = obj; res.DefSOName = n; Info("Это исходный MissileDefinition SO: \"" + n + "\""); }
         } else if (obj is GameObject) {
           var go = (GameObject)obj;
           bool exact = IsExactNuke(n), haveExact = IsExactNuke(res.PrefabName);

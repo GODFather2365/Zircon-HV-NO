@@ -40,6 +40,7 @@ namespace ZirconHV {
     GameObject prefab;
     string assetName;
     object bundleMountSO;   // v6 ПРАВКА 2: WeaponMount SO прямо из бандла
+    object bundleDefSO;     // v7: MissileDefinition SO прямо из бандла (если есть)
     object enc;                             // экземпляр Encyclopedia
     GameObject clone;                       // клон префаба (стадия d)
     bool cloned;
@@ -101,8 +102,9 @@ namespace ZirconHV {
           stage = "b) загрузка zircon-ассетов";
           Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [b]: GetAllAssetNames() бандла \"" + mmBundle.name + "\", имена с \"zircon\" гружу LoadAsset(name) и раскладываю по типам (v6 ПРАВКА 2)...");
           var za = Refl.LoadZirconAssets(mmBundle);
-          prefab = za.Prefab; assetName = za.PrefabName; bundleMountSO = za.MountSO;
+          prefab = za.Prefab; assetName = za.PrefabName; bundleMountSO = za.MountSO; bundleDefSO = za.DefSO;
           if (bundleMountSO != null) Log.LogInfo("[b] Найден исходный WeaponMount SO в бандле: \"" + za.MountSOName + "\" (тип " + bundleMountSO.GetType().FullName + ").");
+          if (bundleDefSO != null) Log.LogInfo("[b] Найден исходный MissileDefinition SO в бандле: \"" + za.DefSOName + "\" (тип " + bundleDefSO.GetType().FullName + ") — v7: шаблон для AddUnit.");
           if (prefab == null) {
             Log.LogError("Попытка " + attempt + " [b]: бандл \"" + mmBundle.name + "\" найден, но GameObject-префаба с \"zircon\" в нём нет — сбрасываю бандл и ищу другой.");
             mmBundle = null;
@@ -164,7 +166,7 @@ namespace ZirconHV {
       // (e)+(f) регистрация EncyclopediaLoader + инжект хардпоинтов
       stage = "e/f) регистрация + инжект";
       Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [e]: EncyclopediaLoader.AddWeaponMount/AddUnit + [f] InjectHardpointsV3...");
-      bool ok = Registration.RegisterAndInject(clone, enc, bundleMountSO);
+      bool ok = Registration.RegisterAndInject(clone, enc, bundleMountSO, bundleDefSO);
       if (ok) { done = true; stage = "завершено"; }
       else Log.LogWarning("Попытка " + attempt + " [e/f]: регистрация/инжект не удались (см. ошибки выше), повторю в следующем тике.");
     }
@@ -334,6 +336,13 @@ namespace ZirconHV {
           Array opts = optsF.GetValue(hp) as Array;
           if (opts == null) { Warn("Hardpoint с mount \"" + wn + "\": pylonOptions=null, расширять не из чего."); continue; }
           if (opts.Length == 0) { Warn("Hardpoint с mount \"" + wn + "\": pylonOptions пуст — копии последней опции нет, пропускаю."); continue; }
+          // v7 idempotency: skip hardpoints that already carry our clone option
+          bool already = false;
+          for (int q = 0; q < opts.Length; q++) {
+            var om = optMountF.GetValue(opts.GetValue(q)) as UnityEngine.Object;
+            if (ReferenceEquals(om, mountClone)) { already = true; break; }
+          }
+          if (already) { Info("Hardpoint (\"" + ((UnityEngine.Object)hp).name + "\"): наша опция уже в pylonOptions[" + opts.Length + "] — пропускаю (idempotent)."); continue; }
           object last = opts.GetValue(opts.Length - 1);
           object copy = ShallowCopyOption(last, optT);
           if (copy == null) continue;
@@ -348,10 +357,17 @@ namespace ZirconHV {
         } catch (Exception e) { Warn("Инъекция в один Hardpoint упала: " + e.Message); }
       }
       LastInjectedSets = extended;
-      if (extended > 0) { Info("HardpointInjector: расширено хардпоинтов = " + extended + " (совпало с \"Zircon\": " + matched + ")."); return true; }
-      Warn("Ни один Hardpoint не подошёл (совпадений \"Zircon\" = " + matched + "). Это нормально до загрузки ангаров/сцены — повторю в следующем тике.");
-      return false;
+      if (extended > 0) { Info("HardpointInjector: расширено хардпоинтов = " + extended + " (совпало с \"Zircon\": " + matched + ")."); injDone = true; return true; }
+      if (matched > 0 && !injDone) Warn("Ни один Hardpoint не расширен (совпадений \"Zircon\" = " + matched + ", но наша опция уже стоит/пирамиды пусты).");
+      // v7: hardpoints appear only after the player opens a hangar / spawns aircraft.
+      // If we never saw a single "Zircon" match yet, keep stage e/f alive (return false)
+      // so the loop retries every tick until budget ends — otherwise the mod would mark
+      // itself done while the weapon is nowhere in the game.
+      if (matched == 0) return false;
+      return injDone;
     }
+
+    static bool injDone;   // v7: sticky flag — injection succeeded at least once
 
     /// <summary>info.weaponName of a WeaponMount via reflection (field or property chain).</summary>
     static string GetWeaponName(object mount) {
@@ -382,43 +398,46 @@ namespace ZirconHV {
 
 
     // ---------------------------------------------------------------
-    // Register + inject (called repeatedly until success) — v3 flow:
-    // EncyclopediaLoader.AddWeaponMount/AddUnit first, direct collection
-    // add as fallback; hardpoint injection via pylonOptions (add-only).
+    // Register + inject (called repeatedly until success) — v7 flow:
+    // WeaponMount/MissileDefinition берутся КАК СОБСТВЕННЫЕ КОМПОНЕНТЫ КЛОНА
+    // (Instantiate глубокого копирует и MonoBehaviour-компоненты, и вложенные
+    // ScriptableObjects через сериализованные ссылки) — это ровно то, что
+    // реально принимает EncyclopediaLoader.AddWeaponMount/AddUnit.
+    // SO из бандла — только источник имени для диагностики.
+    // Далее EncyclopediaLoader.AddWeaponMount/AddUnit, прямой add как фолбэк;
+    // инжекция pylonOptions (add-only) — с повтором на каждом тике, чтобы
+    // захватить хардпоинты, заспавненные позже.
     // ---------------------------------------------------------------
-    public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO) {
-      bool anyOk = false;
+    public static bool RegisterAndInject(GameObject clone, object enc, object bundleMountSO, object bundleDefSO) {
+      // diagnostic names from the bundle SOs (v6 ПРАВКА 2 results), not used as templates
+      if (bundleMountSO != null) Info("[e] WeaponMount SO из бандла: \"" + ((UnityEngine.Object)bundleMountSO).name + "\" (только имя для диагностики, шаблон берём из клона).");
+      if (bundleDefSO != null) Info("[e] MissileDefinition SO из бандла: \"" + ((UnityEngine.Object)bundleDefSO).name + "\" (только имя для диагностики, шаблон берём из клона).");
 
-      // --- MissileDefinition / WeaponMount clones from the clone's own components ---
+      // --- MissileDefinition / WeaponMount clones = components of the instantiated prefab ---
       var defs = Refl.ComponentsNamed(clone, "MissileDefinition");
       var mounts = Refl.ComponentsNamed(clone, "WeaponMount");
-      if (defs.Length == 0) Err("В клоне нет компонента MissileDefinition — регистрация невозможна.");
-      if (mounts.Length == 0) Err("В клоне нет компонента WeaponMount — инжекция на хардпоинты невозможна.");
+      if (defs.Length == 0) Err("В клоне нет компонента MissileDefinition — AddUnit будет пропущен (см. мини-дамп ниже, если и WeaponMount нет).");
+      if (mounts.Length == 0) Err("В клоне нет компонента WeaponMount — AddWeaponMount/инжекция невозможны.");
 
-      object defClone = null, mountClone = null;
-      if (defs.Length > 0) {
-        Info("Клонирую MissileDefinition (" + defs[0].GetType().FullName + ")...");
-        defClone = Refl.CreateLike(defs[0].GetType(), defs[0]);
-        if (defClone != null) { Warhead.ApplyToBlastYield(defClone); StampUnique(defClone); }
+      object defClone   = defs.Length   > 0 ? defs[0]   : null;   // Instantiate already made it a private copy
+      object mountClone = mounts.Length > 0 ? mounts[0] : null;
+
+      if (defClone != null) { Warhead.ApplyToBlastYield(defClone); StampUnique(defClone); }
+      if (mountClone != null) StampUnique(mountClone);
+      if (defClone != null && mountClone != null) {
+        // link cloned mount -> cloned definition if such a reference field exists
+        foreach (var f in mountClone.GetType().GetFields(Refl.All))
+          if (f.FieldType.IsInstanceOfType(defClone)) { try { f.SetValue(mountClone, defClone); Info("Связал WeaponMount." + f.Name + " -> клон MissileDefinition."); } catch { } }
       }
-      // v6 ПРАВКА 2: шаблон WeaponMount — сначала SO прямо из бандла ( GetType().Name=="WeaponMount" ),
-      // затем компонент клона.
-      UnityEngine.Object mountTemplate = null;
-      if (bundleMountSO != null) { mountTemplate = (UnityEngine.Object)bundleMountSO; Info("Шаблон WeaponMount: SO из бандла (" + mountTemplate.GetType().FullName + ")..."); }
-      else if (mounts.Length > 0) { mountTemplate = mounts[0]; Info("Клонирую WeaponMount (" + mountTemplate.GetType().FullName + ")..."); }
-      else Err("Ни WeaponMount SO в бандле, ни компонента WeaponMount в клоне — инъекция на хардпоинты невозможна.");
-      if (mountTemplate != null) {
-        mountClone = Refl.CreateLike(mountTemplate.GetType(), mountTemplate);
-        if (mountClone != null && defClone != null) {
-          // link cloned mount -> cloned definition if such a reference field exists
-          foreach (var f in mountClone.GetType().GetFields(Refl.All))
-            if (f.FieldType.IsInstanceOfType(defClone)) { try { f.SetValue(mountClone, defClone); } catch { } }
-        }
+      if (mountClone == null || defClone == null) {
+        Type probe = mountClone != null ? mountClone.GetType() : (defClone != null ? defClone.GetType() : typeof(Component));
+        Err("Не хватает " + (mountClone == null ? "WeaponMount" : "MissileDefinition") + " среди компонентов клона. Мини-дамп типа " + probe.FullName + ":");
+        Refl.DumpMembers(probe);
       }
 
-      // --- v3 PRIMARY: Blueprinter.Ops.EncyclopediaLoader.AddWeaponMount / AddUnit ---
+      // --- PRIMARY: Blueprinter.Ops.EncyclopediaLoader.AddWeaponMount / AddUnit ---
       bool opsOk = RegisterViaOps(clone, enc, defClone, mountClone);
-      anyOk |= opsOk;
+      bool anyOk = opsOk;
 
       // --- FALLBACK: direct Encyclopedia/WeaponLookup collection add (only if Ops failed) ---
       if (!opsOk) {
@@ -444,10 +463,13 @@ namespace ZirconHV {
         }
       }
 
-      // --- HardpointSet injection via pylonOptions (v3, MK-88 Hydra add-only pattern) ---
-      anyOk |= InjectHardpointsV3(mountClone);
+      // --- HardpointSet injection via pylonOptions (MK-88 Hydra add-only pattern) ---
+      // v7: runs EVERY tick even after Ops succeeded (aircraft/hangars spawn later),
+      // so stage e/f only finishes when at least one hardpoint accepted the mount.
+      bool injOk = InjectHardpointsV3(mountClone);
+      anyOk |= injOk;
 
-      if (anyOk) {
+      if (anyOk && injOk) {
         // v4 p.5 / v5 p.5: final success summary
         string jk = null;
         foreach (var target in new object[] { defClone, mountClone, clone }) {
@@ -463,7 +485,7 @@ namespace ZirconHV {
         Info("  инжектировано hardpoint set(s): " + LastInjectedSets);
         Info("Инъекция завершена успешно.");
       }
-      return anyOk;
+      return anyOk && injOk;   // v7: done only when the weapon is also on real hardpoints
     }
 
     static void StampUnique(object o) {

@@ -6,99 +6,159 @@ using UnityEngine;
 
 namespace ZirconHV {
   /// <summary>
-  /// Coroutine-driven bootstrap v2 — runtime injection pattern (proven by MK-88 Hydra / Tsar Bomba):
-  /// wait for Encyclopedia to exist -> get Multi-Missile bundle from Blueprinter.BundleRegistry
-  /// -> load & clone zircon nuke prefab -> clone MissileDefinition/WeaponMount -> scale yield
-  /// -> register into Encyclopedia/WeaponLookup -> inject WeaponMount into Aircraft/HardpointSet.
-  /// Every step logs; failures are logged and skipped, never crash the game.
+  /// v5: КОРУТИН ПОЛНОСТЬЮ НЕТ (диагноз v4: «Попытка 1/72» — и возобновления не было,
+  /// механизм resumption умер, unhandled-исключений нет). Вся логика — в Update():
+  /// тики по 2.5 сек через Time.realtimeSinceStartup, ВСЁ тело в try/catch,
+  /// heartbeat каждые 20 сек, OnDestroy() логирует уничтожение компонента.
+  /// Стадии (переход только при успехе, лог на каждом тике):
+  ///   (a) бандл   — AssetBundle.GetAllLoadedAssetBundles() через рефлексию
+  ///   (b) префаб  — GetAllAssetNames() -> zirconnuke (нормализованно), fuzzy *zircon*.prefab
+  ///   (c) Encyclopedia — Resources.FindObjectsOfTypeAll через MakeGenericMethod
+  ///   (d) клон    — Instantiate -> RenameClone/RewriteStringIds -> Warhead.blastYield
+  ///   (e) регистрация — EncyclopediaLoader.AddWeaponMount/AddUnit (Activator.CreateInstance)
+  ///   (f) инжект  — InjectHardpointsV3
+  /// Проигрыш любой стадии НЕ убивает Runner: следующий тик повторит попытку,
+  /// пока не кончится бюджет 180 сек (done=true останавливает опрос).
   /// </summary>
   public class Runner : MonoBehaviour {
     public static Runner Instance;
+
+    const float TickInterval = 2.5f;
+    const int   MaxAttempts  = 72;          // 72 x 2.5s ~= 180 sec
+    const float HeartbeatEvery = 20f;
+
     bool done;
+    int attempt;                            // общий счётчик тиков для лога
+    float nextAt;                           // realtimeSinceStartup, когда делать следующий тик
+    float lastHeartbeat;
+    string stage = "a) поиск бандла";
+
+    // результаты стадий (переживаются между тиками)
+    AssetBundle mmBundle;
+    GameObject prefab;
+    string assetName;
+    object enc;                             // экземпляр Encyclopedia
+    GameObject clone;                       // клон префаба (стадия d)
+    bool cloned;
 
     void Awake() {
       if (Instance != null && Instance != this) { Destroy(gameObject); return; }
       Instance = this;
       DontDestroyOnLoad(gameObject);
+      nextAt = Time.realtimeSinceStartup + TickInterval;
+      lastHeartbeat = Time.realtimeSinceStartup;
+      Plugin.Log.LogInfo("Runner v5 запущен БЕЗ корутин: Update()-тики каждые 2.5 сек, максимум " + MaxAttempts
+        + " попыток (~180 сек), heartbeat каждые 20 сек, каждое тело тика в try/catch.");
     }
 
-    public void Start() { StartCoroutine(Run()); }
+    void OnDestroy() {
+      Plugin.Log.LogError("Runner УНИЧТОЖЕН (компонент GameObject удалён из сцены). Опрос остановлен на стадии: "
+        + stage + ", попытка " + attempt + ". Если это произошло ДО успеха — причина в удалении объекта ZirconHV_Root.");
+    }
 
-    IEnumerator Run() {
-      var wait = new WaitForSeconds(2.5f);
-      Plugin.Log.LogInfo("Runner v4 запущен: каждый тик в try/catch, интервал 2.5 сек, до 180 сек, номер попытки в логе.");
-
-      // 1) Wait for a loaded Multi-Missile bundle via AssetBundle.GetAllLoadedAssetBundles()
-      //    (v4 PRIMARY — BundleRegistry.Bundles is an instance field with no reachable instance).
-      AssetBundle mmBundle = null;
-      GameObject prefab = null;
-      string assetName = null;
-      int attempts = 0;
-      while (prefab == null && attempts < 72) {
-        attempts++;
-        try {
-          Plugin.Log.LogInfo("Попытка " + attempts + "/72: ищу загруженный бандл Multi-Missile через GetAllLoadedAssetBundles...");
-          if (mmBundle == null) {
-            mmBundle = Refl.FindMultiMissileBundleByApi();
-            if (mmBundle == null) {
-              Plugin.Log.LogInfo("Попытка " + attempts + ": по API бандл не найден, пробую фолбэк BundleRegistry.Bundles...");
-              mmBundle = Refl.FindMultiMissileBundle();
-            }
-          }
-          if (mmBundle != null) {
-            prefab = Refl.LoadZirconPrefab(mmBundle, out assetName);
-            if (prefab == null) {
-              Plugin.Log.LogError("Попытка " + attempts + ": бандл \"" + mmBundle.name + "\" найден, но префаб zirconnuke в нём нет — сбрасываю бандл и ищу другой.");
-              mmBundle = null;
-            }
-          }
-        } catch (Exception e) {
-          Plugin.Log.LogError("Попытка " + attempts + " (поиск бандла/префаба) бросила исключение (продолжаю): " + e);
-        }
-        if (prefab == null) yield return wait;
+    void Update() {
+      if (done) return;
+      float now = Time.realtimeSinceStartup;
+      if (now < nextAt) return;
+      nextAt += TickInterval;
+      attempt++;
+      try {
+        Tick();
+      } catch (Exception e) {
+        Plugin.Log.LogError("Попытка " + attempt + " (стадия " + stage + ") бросила исключение (продолжаю): " + e);
       }
+      if (now - lastHeartbeat >= HeartbeatEvery) {
+        lastHeartbeat = now;
+        Plugin.Log.LogInfo("Runner жив, попытка " + attempt + "/" + MaxAttempts + ", стадия: " + stage);
+      }
+      if (!done && attempt >= MaxAttempts) {
+        done = true;
+        Plugin.Log.LogError("=== ИТОГ ПРОВАЛА ===");
+        Plugin.Log.LogError("  остановился на стадии: " + stage);
+        Plugin.Log.LogError("  бандл: " + (mmBundle != null ? "\"" + mmBundle.name + "\"" : "не найден (см. список бандлов в логе GetAllLoadedAssetBundles выше)"));
+        Plugin.Log.LogError("  asset name: \"" + (assetName ?? "?") + "\"");
+        Plugin.Log.LogError("  Encyclopedia: " + (enc != null ? "найден" : "НЕ найден (Resources.FindObjectsOfTypeAll пуст, postfix AfterLoad не сработал)"));
+        Plugin.Log.LogError("  клон создан: " + cloned);
+        Plugin.Log.LogError("  jsonKey клона: \"" + (Registration.LastJsonKey ?? "?") + "\"");
+        Plugin.Log.LogError("  AddWeaponMount/AddUnit: " + Registration.LastOpsResult);
+        Plugin.Log.LogError("  инжектировано hardpoint set(s): " + Registration.LastInjectedSets);
+        Plugin.Log.LogError("Бюджет 180 сек исчерпан — опрос остановлен (флаг done), мод больше не шумит.");
+      }
+    }
+
+    /// <summary>Один тик конечного автомата. Каждая стадия выполняется только если предыдущая успешна.</summary>
+    void Tick() {
+      // (a)+(b) бандл и префаб
       if (prefab == null) {
-        Plugin.Log.LogError("Префаб zircon nuke так и не найден за 180 сек (72 попытки). Мод останавливается (без падения).");
-        yield break;
-      }
-      Registration.LastAssetName = assetName;
-      Plugin.Log.LogInfo("Клонирую префаб " + prefab.name + " (asset name: \"" + assetName + "\")...");
-
-      // 3) Clone it.
-      GameObject clone = Refl.ClonePrefab(prefab);
-      if (clone == null) { Plugin.Log.LogError("Instantiate префаба упал."); yield break; }
-      clone.name = Plugin.UniqueId;
-      clone.SetActive(false);
-      try { DontDestroyOnLoad(clone); } catch { }
-
-      // 4) Give the clone unique IDs / UI name (do NOT touch original).
-      Registration.RenameClone(clone, prefab);
-
-      // 5) Scale warhead yield on every numeric field we can find.
-      Warhead.ApplyTo(clone);
-
-      // 6) Phase-2 stub: external OBJ mesh swap point.
-      MeshSwap.TryApplyExternalMesh(clone);
-
-      // 7) Wait until Encyclopedia instance exists in the scene (Chinese-mod pattern),
-      //    then register + inject.
-      attempts = 0;
-      bool registered = false;
-      while (!registered && attempts < 72) {
-        attempts++;
-        try {
-          registered = Registration.RegisterAndInject(clone);
-        } catch (Exception e) {
-          Plugin.Log.LogError("Попытка " + attempts + " (регистрация/инъекция) бросила исключение (продолжаю): " + e);
+        stage = "a) поиск бандла";
+        Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [a]: ищу загруженный бандл Multi-Missile через GetAllLoadedAssetBundles...");
+        if (mmBundle == null) {
+          mmBundle = Refl.FindMultiMissileBundleByApi();
+          if (mmBundle == null) {
+            Plugin.Log.LogInfo("Попытка " + attempt + " [a]: по API бандл не найден, пробую фолбэк BundleRegistry.Bundles...");
+            mmBundle = Refl.FindMultiMissileBundle();
+          }
         }
-        if (!registered) {
-          Plugin.Log.LogInfo("尚無 Encyclopedia 实例，稍后再试 (попытка " + attempts + "/72)...");
-          yield return wait;
+        if (mmBundle != null) {
+          stage = "b) загрузка префаба";
+          Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [b]: грузу zirconnuke из бандла \"" + mmBundle.name + "\"...");
+          string an;
+          prefab = Refl.LoadZirconPrefab(mmBundle, out an);
+          if (prefab != null) assetName = an;
+          else {
+            Plugin.Log.LogError("Попытка " + attempt + " [b]: бандл \"" + mmBundle.name + "\" найден, но префаб zirconnuke в нём нет — сбрасываю бандл и ищу другой.");
+            mmBundle = null;
+          }
         }
+        if (prefab == null) return;
+        Registration.LastAssetName = assetName;
+        Plugin.Log.LogInfo("Стадия (a)+(b) пройдена: префаб \"" + prefab.name + "\" (asset name: \"" + assetName + "\").");
       }
-      if (!registered)
-        Plugin.Log.LogError("Не удалось зарегистрировать клон за 72 попытки — см. логи выше по каждому шагу.");
-      done = true;
+
+      // (c) Encyclopedia должна существовать ДО клонирования — иначе переписанные
+      //     id/name попадут в реестр раньше самой энциклопедии (порядок как в v4).
+      if (enc == null) {
+        stage = "c) ожидание Encyclopedia";
+        Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [c]: ищу Encyclopedia (Resources.FindObjectsOfTypeAll)...");
+        Type encType = Refl.FindTypeInCSharp("Encyclopedia");
+        if (encType == null) {
+          Plugin.Log.LogError("Попытка " + attempt + " [c]: тип Encyclopedia в Assembly-CSharp не найден (продолжаю искать в следующих тиках).");
+          return;
+        }
+        Plugin.Log.LogInfo("Нашел тип Encyclopedia = " + encType.FullName);
+        enc = Registration.FindEncyclopedia(encType);
+        if (enc == null) {
+          Plugin.Log.LogInfo("Попытка " + attempt + " [c]:尚无 Encyclopedia 实例，稍后再试 (postfix-статика и поллинг пусты)...");
+          return;
+        }
+        Plugin.Log.LogInfo("Стадия (c) пройдена: Encyclopedia-экземпляр \"" + ((UnityEngine.Object)enc).name + "\" (" + enc.GetType().FullName + ").");
+      }
+
+      // (d) клон: Instantiate -> RenameClone/RewriteStringIds -> Warhead.blastYield
+      if (!cloned) {
+        stage = "d) клонирование префаба";
+        Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [d]: Клонирую префаб " + prefab.name + " (asset name: \"" + assetName + "\")...");
+        clone = Refl.ClonePrefab(prefab);
+        if (clone == null) {
+          Plugin.Log.LogError("Попытка " + attempt + " [d]: Instantiate префаба упал (повторю в следующем тике).");
+          return;
+        }
+        clone.name = Plugin.UniqueId;
+        clone.SetActive(false);
+        try { DontDestroyOnLoad(clone); } catch { }
+        Registration.RenameClone(clone, prefab);
+        Warhead.ApplyTo(clone);
+        MeshSwap.TryApplyExternalMesh(clone); // Phase-2 stub
+        cloned = true;
+        Plugin.Log.LogInfo("Стадия (d) пройдена: клон \"" + clone.name + "\" создан, ID переписаны на " + Plugin.UniqueId + ".");
+      }
+
+      // (e)+(f) регистрация EncyclopediaLoader + инжект хардпоинтов
+      stage = "e/f) регистрация + инжект";
+      Plugin.Log.LogInfo("Попытка " + attempt + "/" + MaxAttempts + " [e]: EncyclopediaLoader.AddWeaponMount/AddUnit + [f] InjectHardpointsV3...");
+      bool ok = Registration.RegisterAndInject(clone, enc);
+      if (ok) { done = true; stage = "завершено"; }
+      else Plugin.Log.LogWarning("Попытка " + attempt + " [e/f]: регистрация/инжект не удались (см. ошибки выше), повторю в следующем тике.");
     }
   }
 
@@ -106,6 +166,8 @@ namespace ZirconHV {
     const string Tag = "ZirconHV: ";
     public static string LastAssetName;     // v4 p.5 summary
     public static int LastInjectedSets;     // v4 p.5 summary
+    public static string LastJsonKey;       // v5 fail-summary
+    public static string LastOpsResult = "не вызывалось"; // v5 fail-summary
 
     static void Info(string s) { Plugin.Log.LogInfo(Tag + s); }
     static void Warn(string s) { Plugin.Log.LogWarning(Tag + s); }
@@ -157,18 +219,18 @@ namespace ZirconHV {
     //   Void AddWeaponMount(Encyclopedia encyclopedia, WeaponMount mount)
     //   Void AddUnit(Encyclopedia encyclopedia, UnitDefinition unit)
     // ---------------------------------------------------------------
-    static bool RegisterViaOps(GameObject clone, object defClone, object mountClone) {
+    static bool RegisterViaOps(GameObject clone, object enc, object defClone, object mountClone) {
       Type loaderT = Refl.FindType("Blueprinter.Ops.EncyclopediaLoader");
       if (loaderT == null) { Err("Тип Blueprinter.Ops.EncyclopediaLoader не найден. Пробую поиск по короткому имени..."); loaderT = Refl.FindTypeInCSharp("EncyclopediaLoader"); }
-      if (loaderT == null) { Err("EncyclopediaLoader нигде не найден — фолбэк на прямое добавление."); return false; }
+      if (loaderT == null) { Err("EncyclopediaLoader нигде не найден — фолбэк на прямое добавление."); LastOpsResult = "EncyclopediaLoader не найден"; return false; }
 
       object loader;
       try { loader = Activator.CreateInstance(loaderT, true); Info("Создал экземпляр " + loaderT.FullName + " через Activator.CreateInstance..."); }
-      catch (Exception e) { Err("Activator.CreateInstance(" + loaderT.FullName + ") упал: " + e.Message + ". Мини-дамп:"); Refl.DumpMembers(loaderT); return false; }
+      catch (Exception e) { Err("Activator.CreateInstance(" + loaderT.FullName + ") упал: " + e.Message + ". Мини-дамп:"); Refl.DumpMembers(loaderT); LastOpsResult = "Activator.CreateInstance упал: " + e.Message; return false; }
 
-      // Encyclopedia instance: postfix-captured first, then polling fallbacks.
-      object enc = EncyclopediaPatches.LastInstance ?? FindSceneInstance(Refl.FindTypeInCSharp("Encyclopedia"));
-      if (enc == null) { Info("尚无 Encyclopedia 实例，稍后再试 (postfix ещё не сработал, поллинг не дал результата)..."); return false; }
+      // v5: Encyclopedia instance comes from the Runner stage (c): postfix-captured static
+      // OR Resources.FindObjectsOfTypeAll polling — passed in as parameter, we do NOT re-poll here.
+      if (enc == null) { Info("尚无 Encyclopedia 实例，稍后再试 (Runner ещё не получил инстанс)..."); LastOpsResult = "Encyclopedia-инстанс не передан"; return false; }
       Info("Использую Encyclopedia экземпляр: " + enc.GetType().FullName);
 
       bool ok = false;
@@ -185,7 +247,8 @@ namespace ZirconHV {
         if (InvokeTyped(loader, addUnit, enc, defClone)) ok = true;
       } else Warn("AddUnit не найден на " + loaderT.Name + " или defClone=null.");
 
-      if (!ok) { Err("Ни один метод EncyclopediaLoader не подошёл под наши клоны. Мини-дамп методов:"); Refl.DumpMembers(loaderT); }
+      if (!ok) { Err("Ни один метод EncyclopediaLoader не подошёл под наши клоны. Мини-дамп методов:"); Refl.DumpMembers(loaderT); LastOpsResult = "ни AddWeaponMount, ни AddUnit не подошли"; }
+      else LastOpsResult = ok ? "УСПЕХ" : "НЕТ";
       return ok;
     }
 
@@ -322,7 +385,7 @@ namespace ZirconHV {
     // EncyclopediaLoader.AddWeaponMount/AddUnit first, direct collection
     // add as fallback; hardpoint injection via pylonOptions (add-only).
     // ---------------------------------------------------------------
-    public static bool RegisterAndInject(GameObject clone) {
+    public static bool RegisterAndInject(GameObject clone, object enc) {
       bool anyOk = false;
 
       // --- MissileDefinition / WeaponMount clones from the clone's own components ---
@@ -348,7 +411,7 @@ namespace ZirconHV {
       }
 
       // --- v3 PRIMARY: Blueprinter.Ops.EncyclopediaLoader.AddWeaponMount / AddUnit ---
-      bool opsOk = RegisterViaOps(clone, defClone, mountClone);
+      bool opsOk = RegisterViaOps(clone, enc, defClone, mountClone);
       anyOk |= opsOk;
 
       // --- FALLBACK: direct Encyclopedia/WeaponLookup collection add (only if Ops failed) ---
@@ -358,7 +421,7 @@ namespace ZirconHV {
         if (encType == null) encType = Refl.FindTypeInCSharp("WeaponManager");
         if (encType == null) Err("Ни Encyclopedia, ни WeaponLookup/WeaponManager не найдены — фолбэк невозможен.");
         else {
-          object enc = EncyclopediaPatches.LastInstance ?? FindSceneInstance(encType);
+          if (enc == null) enc = FindEncyclopedia(encType);
           if (enc == null) { Info("尚无 Encyclopedia 实例，稍后再试 (фолбэк тоже ждёт)..."); return false; }
           Info("Нашел Encyclopedia в сцене: " + ((UnityEngine.Object)enc).name + ". Фолбэк: ищу метод добавления оружия...");
           MethodInfo addM = FindAddMethod(encType, defClone != null ? defClone.GetType() : null,
@@ -379,13 +442,14 @@ namespace ZirconHV {
       anyOk |= InjectHardpointsV3(mountClone);
 
       if (anyOk) {
-        // v4 p.5: final success summary
+        // v4 p.5 / v5 p.5: final success summary
         string jk = null;
         foreach (var target in new object[] { defClone, mountClone, clone }) {
           if (target == null) continue;
           var v = Refl.FieldOrProp(target, "jsonKey") as string;
           if (v != null) { jk = v; break; }
         }
+        LastJsonKey = jk;
         Info("=== ИТОГ УСПЕХА ===");
         Info("  asset name префаба: \"" + (LastAssetName ?? "?") + "\"");
         Info("  jsonKey клона: \"" + (jk ?? "?") + "\" (уникальный ID = " + Plugin.UniqueId + ")");
@@ -404,6 +468,24 @@ namespace ZirconHV {
     }
 
     // ---------------- helpers ----------------
+
+    /// <summary>
+    /// v5 p.3: Encyclopedia instance lookup for the Runner stage (c).
+    /// PRIMARY = Harmony-postfix static (EncyclopediaPatches.LastInstance, secondary source),
+    /// then Resources.FindObjectsOfTypeAll via MakeGenericMethod (first non-null),
+    /// then static Instance/instance/Current, then Object.FindObjectsOfType.
+    /// </summary>
+    public static object FindEncyclopedia(Type encType) {
+      if (encType == null) return null;
+      object byPostfix = EncyclopediaPatches.LastInstance;
+      if (byPostfix != null && encType.IsInstanceOfType(byPostfix)) {
+        Info("Encyclopedia получен из Harmony-postfix (Encyclopedia::AfterLoad): \"" + ((UnityEngine.Object)byPostfix).name + "\".");
+        return byPostfix;
+      }
+      var found = FindSceneInstance(encType);
+      if (found != null) Info("Encyclopedia получен поллингом (Resources.FindObjectsOfTypeAll/статика).");
+      return found;
+    }
 
     /// <summary>
     /// Finds a live instance of the given type. v4 p.2: PRIMARY = Resources.FindObjectsOfTypeAll(type)

@@ -27,8 +27,8 @@ namespace ZirconHV {
       DumpApi = Config.Bind("Debug","DumpBlueprinterApi",false,"true -> dump all Blueprinter-ish types/members to LogOutput.log (run once on live game, then report member names back to the author).");
       if (DumpApi.Value) DumpBlueprinterApi();
       EncyclopediaPatches.Apply(); // v3: postfix on Encyclopedia.AfterLoad (Tsar Bomba pattern)
-      try { var root = new GameObject("ZirconHV_Root"); UnityEngine.Object.DontDestroyOnLoad(root); var r = root.AddComponent<Runner>(); } catch (Exception e) { Log.LogError("root init: " + e); }
-      Runner.Instance.Start(); // coroutine-driven, waits for Blueprinter to be ready
+      try { var root = new GameObject("ZirconHV_Root"); UnityEngine.Object.DontDestroyOnLoad(root); var r = root.AddComponent<Runner>(); if (r == null) Log.LogError("AddComponent<Runner>() вернул null — Runner не создан!"); } catch (Exception e) { Log.LogError("root init: " + e); }
+      // v5: НИКАКИХ StartCoroutine — Runner работает целиком в Update() (см. Registration.cs).
       Log.LogInfo(NAME+" "+VERSION+" loaded. YieldKt="+YieldKt.Value);
     }
   }

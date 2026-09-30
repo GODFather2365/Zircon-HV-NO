@@ -75,18 +75,25 @@ namespace ZirconHV {
       while ((n = src.Read(buf, 0, buf.Length)) > 0) dst.Write(buf, 0, n);
     }
 
-    static System.Collections.IEnumerable AllLoadedBundles() {
-      var m = typeof(AssetBundle).GetMethod("GetAllLoadedAssetBundles",
-            BindingFlags.Public | BindingFlags.Static);
-      if ((object)m == null) yield break;
-      System.Collections.IEnumerable r = null;
-      try { r = m.Invoke(null, null) as System.Collections.IEnumerable; } catch { }
-      if (r == null) yield break;
-      foreach (object o in r) if (o is AssetBundle) yield return (AssetBundle)o;
+    // v5 p.2: БЕЗ iterator-методов (yield). Materialize в List<T>, чтобы в проекте
+    // не осталось ни IEnumerator, ни IEnumerable — никаких скрытых итераторов.
+    static List<AssetBundle> AllLoadedBundles() {
+      var list = new List<AssetBundle>();
+      try {
+        var m = typeof(AssetBundle).GetMethod("GetAllLoadedAssetBundles",
+              BindingFlags.Public | BindingFlags.Static);
+        if ((object)m == null) return list;
+        System.Collections.IEnumerable r = null;
+        try { r = m.Invoke(null, null) as System.Collections.IEnumerable; } catch { }
+        if (r == null) return list;
+        foreach (object o in r) if (o is AssetBundle) list.Add((AssetBundle)o);
+      } catch (Exception e) { Plugin.Log.LogWarning("AllLoadedBundles: " + e.Message); }
+      return list;
     }
 
-    static IEnumerable<string> EnumerateNobp(Assembly mm) {
+    static List<string> EnumerateNobp(Assembly mm) {
       var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      var result = new List<string>();
       string baseDir = null;
       try { baseDir = Path.GetDirectoryName(mm.Location); } catch { }
       var roots = new List<string>();
@@ -94,17 +101,18 @@ namespace ZirconHV {
       try { roots.Add(BepInEx.Paths.PluginPath); } catch { }
       foreach (var root in roots) {
         if (!Directory.Exists(root)) continue;
-        IEnumerable<string> files;
+        string[] files;
         try { files = Directory.GetFiles(root, "*.nobp", SearchOption.AllDirectories); } catch { continue; }
         foreach (var f in files) {
           if (f.IndexOf("missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
               f.IndexOf("zircon", StringComparison.OrdinalIgnoreCase) >= 0) {
-            if (seen.Add(f)) yield return f;
+            if (seen.Add(f)) result.Add(f);
           } else if (seen.Add(f)) { /* keep as generic fallback candidate */ }
         }
         // also generic pass
-        foreach (var f in files) if (seen.Add(f)) yield return f;
+        foreach (var f in files) if (seen.Add(f)) result.Add(f);
       }
+      return result;
     }
 
     static void LoadDepsFirst(AssetBundle ab) {

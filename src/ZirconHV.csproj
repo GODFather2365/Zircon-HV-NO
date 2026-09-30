@@ -8,23 +8,27 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
-    <!-- BCL = real .NET 3.5 ref assemblies from /tmp/refs (mscorlib v2.0.0.0).
-         UnityEngine.Modules refs are typed against netstandard 2.1 -> facade shim added below. -->
+    <!-- BCL = real .NET 3.5 reference assemblies (mscorlib v2.0.0.0).
+         Game-side DLLs are Cecil-normalized copies in ./refs (their mscorlib/System
+         refs rewritten to v4 so MSBuild's net35 resolver accepts them; the plugin's
+         own refs keep the original names/versions, which is exactly what Mono needs
+         at runtime). Regenerate with buildtools/make-refs.sh -->
     <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="mscorlib"><HintPath>/tmp/refs/mscorlib.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="System"><HintPath>/tmp/refs/System.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="System.Core"><HintPath>/tmp/refs/System.Core.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="System.Xml"><HintPath>/tmp/refs/System.Xml.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="mscorlib"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/mscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/System.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Core"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/System.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Xml"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/System.Xml.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="BepInEx"><HintPath>/tmp/refs/BepInEx.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="0Harmony"><HintPath>/tmp/refs/0Harmony.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine"><HintPath>/tmp/refs-ns2ms/UnityEngine.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.CoreModule"><HintPath>/tmp/refs-ns2ms/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.AssetBundleModule"><HintPath>/tmp/refs-ns2ms/UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>/tmp/refs-ns2ms/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>/tmp/refs-ns2ms/UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AssetBundleModule"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard"><HintPath>$(MSBuildProjectDirectory)/../refs-v4/netstandard.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

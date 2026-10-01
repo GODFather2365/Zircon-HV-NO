@@ -11,7 +11,7 @@ namespace ZirconHV {
   [BepInPlugin(GUID, NAME, VERSION)]
   [BepInDependency("com.kingwixly.multimissile", BepInDependency.DependencyFlags.SoftDependency)]
   public partial class Plugin : BaseUnityPlugin {
-    public const string GUID="com.godfather2365.zirconhv", NAME="Zircon Heavy Variant", VERSION="1.0.1";
+    public const string GUID="com.godfather2365.zirconhv", NAME="Zircon Heavy Variant", VERSION="1.0.3";
     public const string UniqueId = "Zircon_HV_GODFather";
     internal static ConfigEntry<float> YieldKt; internal static ConfigEntry<string> PrefabPath;
     internal static ConfigEntry<bool> EnableTwinFallback, OverrideOriginal, DumpApi;
@@ -147,7 +147,8 @@ namespace ZirconHV {
 
       stage = "e/f) регистрация + инжект";
       bool ok = Registration.RegisterAndInject(clone, enc, bundleMountSO, bundleDefSO);
-      if (ok) { done = true; stage = "завершено"; }
+      if (ok) { done = true; stage = "завершено";
+        Log.LogInfo("=== ИТОГ: регистрация ок, пилоны инжектированы (" + Registration.LastInjectedSets + "). Ops=" + Registration.LastOpsResult + ", jsonKey=" + Registration.LastJsonKey + " ==="); }
       else if (Registration.injectedAtLeastOnce) {
         // v1.0.1: оружие зарегистрировано, но пилоны ещё неpatched (Hardpoint'ы не созданы).
         // Считаем регистрацию успешной и продолжаем перепробовать инжект в Update().
